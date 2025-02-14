@@ -3,9 +3,11 @@ Website Vulnerability Scanner
 ## Overview
 
 This Python-based vulnerability scanner is designed to identify common security vulnerabilities in websites. It uses asynchronous programming with `asyncio` and `aiohttp` to efficiently crawl and scan multiple URLs concurrently. The scanner includes checks for SQL injection, cross-site scripting (XSS), missing security headers, and directory listing.
+**Disclaimer**: Use on unauthorized websites is unethical and may be illegal!!!!
 
-**Disclaimer**: Use this tool only on websites that you own or have explicit permission to test. Unauthorized use is illegal and unethical.
 
+## Demo 
+[Demo][]
 ## Features
 
 -   **Asynchronous Scanning**: Utilizes `asyncio` and `aiohttp` for concurrent crawling and scanning, improving performance.
