@@ -7,7 +7,7 @@ This Python-based vulnerability scanner is designed to identify common security 
 
 
 ## Demo 
-[Demo][]
+[Demo][https://github.com/omariomari2/Website-Vulnerability-Scanner/blob/main/wvs%20demo.gif]
 ## Features
 
 -   **Asynchronous Scanning**: Utilizes `asyncio` and `aiohttp` for concurrent crawling and scanning, improving performance.
