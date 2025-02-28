@@ -39,39 +39,37 @@ Before you begin, ensure you have the following installed:
 ## 🛠️ Installation
 
 1. Clone the repository:
-
    ```bash
-   git clone https://github.com/your-username/website-vulnerability-scanner.git
+   git clone https://github.com/yourusername/website-vulnerability-scanner.git](https://github.com/omariomari2/Website-Vulnerability-Scanner.git
    cd website-vulnerability-scanner
    ```
-
-2. Install the dependencies:
-
-   - To install individual dependencies:
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-   - Alternatively, install all dependencies at once:
-     ```bash
-     pip install -r requirements.txt
-     ```
-
-3. Set up environment variables:
-
-   - Create a `.env` file in the project root.
-   - Add your DeepSeek API key:
-     ```bash
-     DEEPSEEK_API_KEY=your-api-key
-     ```
-
+2. Install dependencies at once:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   or individually
+   ```bash
+   pip install aiohttp==3.9.1
+   pip install beautifulsoup4==4.12.2
+   pip install colorama==0.4.6
+   pip install openai==1.3.0
+   pip install python-dotenv
+    
+   # Optional but recommended
+   pip install asyncio
+   pip install urllib3
+   pip install ssl
+    
+   # For development/testing
+   pip install pytest
+   ```
 ---
 
 ## 💻 Usage
 
 1. Run the scanner:
    ```bash
-   python scanner.py
+   python large_scale_vulnerability_scanner.py
    ```
 
 2. Follow the interactive menu:
@@ -85,11 +83,15 @@ Before you begin, ensure you have the following installed:
 
 ## 🏗️ Project Structure
 
-- `scanner.py` - Main scanner script
-- `vulnerabilities.py` - Contains vulnerability detection logic
-- `deepseek.py` - Integration with DeepSeek AI analysis
-- `.env` - Environment file for storing sensitive data
-- `requirements.txt` - Python dependencies
+website-vulnerability-scanner/
+├── large_scale_vulnerability_scanner.py   # Main scanner implementation
+├── vulnerability_analyzer.py              # AI-powered analysis
+├── requirements.txt                       # Project dependencies
+├── .env                                  # Environment variables (create this)
+├── .github/
+│   └── workflows/
+│       └── main.yml                      # CI/CD configuration
+└── README.md                             # This file
 
 ---
 
