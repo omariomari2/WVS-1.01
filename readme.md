@@ -10,7 +10,7 @@ A powerful, asynchronous web security scanner that detects common vulnerabilitie
 This tool is for **educational and authorized testing purposes only**. Using this scanner on websites without explicit permission is unethical and may be illegal.
 
 ---
-If encountering issues, or for any basic enquiry, please email: `owusuomaribright@gmail.com', or contact through my website at @omariomari2@github.io
+If encountering issues, or for any basic enquiry, please email: `owusuomaribright@gmail.com', or contact through my website at @ omariomari2@github.io
 Do not disclose security vulnerabilities publicly. Responsible disclosure is appreciated.
 
 ## 🚀 Features
