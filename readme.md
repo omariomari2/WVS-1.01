@@ -193,8 +193,7 @@ Do not disclose security vulnerabilities publicly. Responsible disclosure is app
 
 ---
 
-Made with ❤️ by [Your Name]
+Made with ❤️ by 
+## Omari!
 
 ---
-
-This updated README is now more concise and follows GitHub's conventions. Let me know if you'd like to add or change anything!
