@@ -29,6 +29,7 @@ This Python-based vulnerability scanner is designed to identify common security 
 Install the required packages using pip:
 ```bash
 pip install aiohttp beautifulsoup4
+pip install colorama
 ```
 
 ## Usage
