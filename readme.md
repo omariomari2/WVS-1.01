@@ -84,14 +84,14 @@ Before you begin, ensure you have the following installed:
 ## 🏗️ Project Structure
 
 website-vulnerability-scanner/
-├── large_scale_vulnerability_scanner.py   # Main scanner implementation
-├── vulnerability_analyzer.py              # AI-powered analysis
-├── requirements.txt                       # Project dependencies
-├── .env                                  # Environment variables (create this)
+├── large_scale_vulnerability_scanner.py   # Main scanner implementation <br>
+├── vulnerability_analyzer.py              # AI-powered analysis <br>
+├── requirements.txt                       # Project dependencies <br>
+├── .env                                  # Environment variables (create this) <br>
 ├── .github/
 │   └── workflows/
-│       └── main.yml                      # CI/CD configuration
-└── README.md                             # This file
+│       └── main.yml                      # CI/CD configuration <br>
+└── README.md                             # This file <br>
 
 ---
 
