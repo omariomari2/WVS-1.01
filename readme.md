@@ -196,7 +196,7 @@ Do not disclose security vulnerabilities publicly. Responsible disclosure is app
 
 ---
 
-Made with ❤️ by 
+Made with by 
 ## Omari!
 
 ---
