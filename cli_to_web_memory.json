@@ -1,0 +1,32 @@
+{
+  "url": "https://neurologist-0ox7.onrender.com/accounts/register/",
+  "vulns": [
+    "Security Headers Check:\nMissing Content-Security-Policy header (helps prevent harmful scripts).\nMissing Strict-Transport-Security header (enforces secure connections).",
+    "Directory Listing Test: No directory listing detected."
+  ],
+  "scan_results": [
+    [
+      "https://neurologist-0ox7.onrender.com/accounts/register/",
+      [
+        "Security Headers Check:\nMissing Content-Security-Policy header (helps prevent harmful scripts).\nMissing Strict-Transport-Security header (enforces secure connections).",
+        "Directory Listing Test: No directory listing detected."
+      ]
+    ],
+    [
+      "https://neurologist-0ox7.onrender.com/",
+      [
+        "Security Headers Check:\nMissing Content-Security-Policy header (helps prevent harmful scripts).\nMissing Strict-Transport-Security header (enforces secure connections).",
+        "Directory Listing Test: No directory listing detected."
+      ]
+    ],
+    [
+      "https://neurologist-0ox7.onrender.com/accounts/login/",
+      [
+        "Security Headers Check:\nMissing Content-Security-Policy header (helps prevent harmful scripts).\nMissing Strict-Transport-Security header (enforces secure connections).",
+        "Directory Listing Test: No directory listing detected."
+      ]
+    ]
+  ],
+  "base_url": "https://neurologist-0ox7.onrender.com/accounts/register/",
+  "depth": 2
+}

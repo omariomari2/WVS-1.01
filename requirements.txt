@@ -1,4 +1,6 @@
-aiohttp==3.9.1
+aiohttp
+Flask
+python-dotenvhttp==3.9.1
 beautifulsoup4==4.12.2
 colorama==0.4.6
 google-generativeai==0.3.1

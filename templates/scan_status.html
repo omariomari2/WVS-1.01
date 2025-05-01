@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scan Status</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+<div class="container mt-5">
+    <h1>Scan Status</h1>
+    <p><strong>URL:</strong> {{ scan.url }}</p>
+    <p><strong>Depth:</strong> {{ scan.depth }}</p>
+    {% if scan.status == 'pending' %}
+        <div class="alert alert-info">Scan in progress... Please refresh this page in a moment.</div>
+    {% else %}
+        <h3>Results</h3>
+        {% for url, vulns in scan.results %}
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <strong>{{ url }}</strong>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for vuln in vulns %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ vuln }}
+                        <button class="btn btn-sm btn-outline-info explain-btn" data-url="{{ url }}" data-vuln="{{ vuln }}">AI Explain</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <!-- Summary Table and Next Steps -->
+                <div class="mt-4">
+                    <h4 class="text-success">Summary Table</h4>
+                    <table class="table table-bordered table-striped">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Severity</th>
+                                <th>Type</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for vuln in vulns %}
+                            {% set sev = classify_severity(vuln) %}
+                            <tr>
+                                <td>
+                                    {% if sev == 'HIGH' %}<span class="badge bg-danger">❌ HIGH</span>{% elif sev == 'MEDIUM' %}<span class="badge bg-warning text-dark">⚠️ MEDIUM</span>{% elif sev == 'LOW' %}<span class="badge bg-info text-dark">ℹ️ LOW</span>{% elif sev == 'PASS' %}<span class="badge bg-success">✅ PASS</span>{% elif sev == 'ERROR' %}<span class="badge bg-secondary">🚫 ERROR</span>{% else %}<span class="badge bg-primary">INFO</span>{% endif %}
+                                </td>
+                                <td>{{ vuln.split(':')[0] if ':' in vuln else vuln }}</td>
+                                <td>{{ vuln if ':' not in vuln else vuln.split(':', 1)[1].strip() }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <h5 class="mt-4 text-primary">Next Steps</h5>
+                    <ul>
+                        <li>Implement missing security headers (see above).</li>
+                        <li>Disable directory listing on your web server.</li>
+                        <li>Regularly review and update security configurations.</li>
+                        <li>Conduct periodic security audits and penetration tests.</li>
+                        <li>Educate developers on secure coding practices.</li>
+                    </ul>
+                    <h6 class="mt-3 text-info">Trusted Remediation Resources</h6>
+                    <ul>
+                        <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers" target="_blank">MDN: HTTP Security Headers</a></li>
+                        <li><a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top Ten</a></li>
+                    </ul>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+    <a href="/" class="btn btn-secondary">Back to Home</a>
+</div>
+<script>
+$(function() {
+    $('.explain-btn').click(function() {
+        var btn = $(this);
+        btn.prop('disabled', true).text('Loading...');
+        $.post('/api/explanation', {
+            url: btn.data('url'),
+            vuln: btn.data('vuln')
+        }, function(data) {
+            alert(data.explanation);
+            btn.prop('disabled', false).text('AI Explain');
+        });
+    });
+});
+</script>
+</body>
+</html>

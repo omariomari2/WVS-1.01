@@ -32,3 +32,4 @@ ENV/
 .vscode/
 *.swp
 *.swo 
+/feautures.txt
