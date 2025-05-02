@@ -73,8 +73,50 @@ def scan_status(scan_id):
     result = scan_results.get(scan_id)
     if not result:
         return 'Scan not found', 404
-    # Pass classify_severity to the template context
-    return render_template('scan_status.html', scan=result, scan_id=scan_id, classify_severity=classify_severity)
+    # Aggregate all vulnerabilities for a single summary
+    all_vulns = []
+    if result.get('results') is not None:
+        for _, vulns in result['results']:
+            all_vulns.extend(vulns)
+    summary_rows = [
+        [classify_severity(v), v.split(':')[0] if ':' in v else v, v if ':' not in v else v.split(':', 1)[1].strip()]
+        for v in all_vulns
+    ]
+    # Pass classify_severity and summary_rows to the template context
+    return render_template('scan_status.html', scan=result, scan_id=scan_id, classify_severity=classify_severity, summary_rows=summary_rows)
+
+@app.route('/download_report/<scan_id>')
+def download_report(scan_id):
+    from flask import make_response, abort
+    result = scan_results.get(scan_id)
+    if not result or not result.get('results'):
+        return abort(404)
+    # Build plain text report
+    lines = []
+    lines.append(f"Website Vulnerability Scan Report\nScan ID: {scan_id}\n{'='*60}\n")
+    for url, vulns in result['results']:
+        lines.append(f"Results for: {url}\n")
+        for idx, vuln in enumerate(vulns):
+            lines.append(f"  {idx+1}. {vuln}")
+        lines.append("\n" + "-"*50 + "\n")
+    # Summary Table
+    all_vulns = [v for _, vulns in result['results'] for v in vulns]
+    lines.append("SUMMARY TABLE:\n")
+    lines.append(f"{'Severity':<10} | {'Type':<20} | Details")
+    lines.append("-"*60)
+    for v in all_vulns:
+        sev = classify_severity(v)
+        typ = v.split(':')[0] if ':' in v else v
+        details = v if ':' not in v else v.split(':', 1)[1].strip()
+        lines.append(f"{sev:<10} | {typ:<20} | {details}")
+    lines.append("\nNEXT STEPS:\n")
+    lines.append("1. Implement missing security headers (see above).\n2. Disable directory listing on your web server.\n3. Regularly review and update security configurations.\n4. Conduct periodic security audits and penetration tests.\n5. Educate developers on secure coding practices.\n")
+    lines.append("Trusted Remediation Resources:\n- https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers\n- https://owasp.org/www-project-top-ten/\n")
+    text_report = "\n".join(lines)
+    response = make_response(text_report)
+    response.headers['Content-Type'] = 'text/plain'
+    response.headers['Content-Disposition'] = f'attachment; filename=scan_report_{scan_id}.txt'
+    return response
 
 @app.route('/api/explanation', methods=['POST'])
 def get_explanation():

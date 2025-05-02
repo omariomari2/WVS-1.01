@@ -28,46 +28,55 @@
                     </li>
                     {% endfor %}
                 </ul>
-                <!-- Summary Table and Next Steps -->
-                <div class="mt-4">
-                    <h4 class="text-success">Summary Table</h4>
-                    <table class="table table-bordered table-striped">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Severity</th>
-                                <th>Type</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {% for vuln in vulns %}
-                            {% set sev = classify_severity(vuln) %}
-                            <tr>
-                                <td>
-                                    {% if sev == 'HIGH' %}<span class="badge bg-danger">❌ HIGH</span>{% elif sev == 'MEDIUM' %}<span class="badge bg-warning text-dark">⚠️ MEDIUM</span>{% elif sev == 'LOW' %}<span class="badge bg-info text-dark">ℹ️ LOW</span>{% elif sev == 'PASS' %}<span class="badge bg-success">✅ PASS</span>{% elif sev == 'ERROR' %}<span class="badge bg-secondary">🚫 ERROR</span>{% else %}<span class="badge bg-primary">INFO</span>{% endif %}
-                                </td>
-                                <td>{{ vuln.split(':')[0] if ':' in vuln else vuln }}</td>
-                                <td>{{ vuln if ':' not in vuln else vuln.split(':', 1)[1].strip() }}</td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                    <h5 class="mt-4 text-primary">Next Steps</h5>
-                    <ul>
-                        <li>Implement missing security headers (see above).</li>
-                        <li>Disable directory listing on your web server.</li>
-                        <li>Regularly review and update security configurations.</li>
-                        <li>Conduct periodic security audits and penetration tests.</li>
-                        <li>Educate developers on secure coding practices.</li>
-                    </ul>
-                    <h6 class="mt-3 text-info">Trusted Remediation Resources</h6>
-                    <ul>
-                        <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers" target="_blank">MDN: HTTP Security Headers</a></li>
-                        <li><a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top Ten</a></li>
-                    </ul>
-                </div>
+
             </div>
         {% endfor %}
+    {% endif %}
+    {% if scan.results is not none %}
+    <!-- Single Summary Table and Next Steps at the bottom -->
+    <div class="mt-5 position-relative">
+        <a href="/download_report/{{ scan_id }}" class="btn btn-outline-primary position-absolute end-0 top-0" style="z-index:2;">
+            <i class="bi bi-file-earmark-pdf"></i> Download PDF Report
+        </a>
+        <h4 class="text-success">Summary Table</h4>
+        <table class="table table-bordered table-striped">
+            <thead class="table-light">
+                <tr>
+                    <th>Severity</th>
+                    <th>Type</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in summary_rows %}
+                <tr>
+                    <td>
+                        {% if row[0] == 'HIGH' %}<span class="badge bg-danger">❌ HIGH</span>{% elif row[0] == 'MEDIUM' %}<span class="badge bg-warning text-dark">⚠️ MEDIUM</span>{% elif row[0] == 'LOW' %}<span class="badge bg-info text-dark">ℹ️ LOW</span>{% elif row[0] == 'PASS' %}<span class="badge bg-success">✅ PASS</span>{% elif row[0] == 'ERROR' %}<span class="badge bg-secondary">🚫 ERROR</span>{% else %}<span class="badge bg-primary">INFO</span>{% endif %}
+                    </td>
+                    <td>{{ row[1] }}</td>
+                    <td>{{ row[2] }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <h5 class="mt-4 text-primary">Next Steps</h5>
+        <ul>
+            <li>Implement missing security headers (see above).</li>
+            <li>Disable directory listing on your web server.</li>
+            <li>Regularly review and update security configurations.</li>
+            <li>Conduct periodic security audits and penetration tests.</li>
+            <li>Educate developers on secure coding practices.</li>
+        </ul>
+        <h6 class="mt-3 text-info">Trusted Remediation Resources</h6>
+        <ul>
+            <li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers" target="_blank">MDN: HTTP Security Headers</a></li>
+            <li><a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top Ten</a></li>
+        </ul>
+    </div>
+    {% else %}
+    <div class="mt-5 alert alert-info">
+        <strong>Scan in progress...</strong> The summary will appear here once the scan is complete.
+    </div>
     {% endif %}
     <a href="/" class="btn btn-secondary">Back to Home</a>
 </div>
