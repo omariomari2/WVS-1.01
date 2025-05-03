@@ -4,14 +4,14 @@ Here's a rewritten version of your README, tailored for a GitHub repository:
 
 # Website Vulnerability Scanner
 
-A powerful, asynchronous web security scanner that detects common vulnerabilities in websites. Built with Python using `asyncio` and `aiohttp` for efficient concurrent scanning, and enhanced with AI-powered vulnerability analysis.
+A powerful, asynchronous web security scanner that detects common vulnerabilities in websites. Built in Python, this tool leverages `asyncio`, `aiohttp`, and modular configuration for efficient, customizable, and scalable vulnerability scanning. Enhanced with AI-powered analysis and a vivid, user-friendly workflow.
 
 ⚠️ **Important Disclaimer**  
 This tool is for **educational and authorized testing purposes only**. Using this scanner on websites without explicit permission is unethical and may be illegal.
 
 ---
-If encountering issues, or for any basic enquiry, please email: `owusuomaribright@gmail.com', 
-or contact through my website at @ [Portfolio](https://omariomari2.github.io/Personal-Website/)
+If encountering issues, or for any basic enquiry, please email: `owusuomaribright@gmail.com`, 
+or contact through my website at [Portfolio](https://omariomari2.github.io/Personal-Website/)
 Do not disclose security vulnerabilities publicly. Responsible disclosure is appreciated.
 
 ## 🚀 Features
@@ -41,29 +41,14 @@ Before you begin, ensure you have the following installed:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/website-vulnerability-scanner.git](https://github.com/omariomari2/Website-Vulnerability-Scanner.git
-   cd website-vulnerability-scanner
+   git clone https://github.com/omariomari2/Website-Vulnerability-Scanner.git
+   cd Website-Vulnerability-Scanner
    ```
-2. Install dependencies at once:
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-   or individually
-   ```bash
-   pip install aiohttp==3.9.1
-   pip install beautifulsoup4==4.12.2
-   pip install colorama==0.4.6
-   pip install openai==1.3.0
-   pip install python-dotenv
-    
-   # Optional but recommended
-   pip install asyncio
-   pip install urllib3
-   pip install ssl
-    
-   # For development/testing
-   pip install pytest
-   ```
+
 ---
 
 ## 💻 Usage
@@ -84,15 +69,18 @@ Before you begin, ensure you have the following installed:
 
 ## 🏗️ Project Structure
 
-website-vulnerability-scanner/
-├── large_scale_vulnerability_scanner.py   # Main scanner implementation <br>
-├── vulnerability_analyzer.py              # AI-powered analysis <br>
-├── requirements.txt                       # Project dependencies <br>
-├── .env                                  # Environment variables (create this) <br>
+Website-Vulnerability-Scanner/
+├── large_scale_vulnerability_scanner.py   # Main scanner implementation
+├── vulnerability_analyzer.py              # AI-powered analysis
+├── web_app.py                             # (If present) Web interface
+├── requirements.txt                       # Project dependencies
+├── scanner_config.yaml                    # Scan configuration
+├── description.txt                        # Vivid workflow and project overview
+├── .env                                   # Environment variables (create this)
 ├── .github/
 │   └── workflows/
-│       └── main.yml                      # CI/CD configuration <br>
-└── README.md                             # This file <br>
+│       └── main.yml                       # CI/CD configuration
+└── README.md                              # This file
 
 ---
 
@@ -126,12 +114,11 @@ The scanner includes robust error handling for:
 
 ## 📊 Output Format
 
-Results are displayed in a color-coded format:
-
-- 🟢 **Green:** Success messages
-- 🟡 **Yellow:** Warnings
-- 🔴 **Red:** Critical vulnerabilities
-- 🔵 **Blue:** Information messages
+Results are displayed in a color-coded format in the terminal and are saved in your chosen format (TXT, HTML, CSV) as configured. Each finding includes:
+- Vulnerability type & severity
+- Affected URLs/parameters
+- Payloads used
+- Remediation recommendations
 
 ---
 
@@ -193,10 +180,11 @@ Do not disclose security vulnerabilities publicly. Responsible disclosure is app
 - Basic vulnerability scanning  
 - AI-powered analysis  
 - Async crawling implementation
+- Modular YAML configuration
+- Vivid workflow documentation
 
 ---
 
-Made with by 
-## Omari!
+Made with ❤️ by Omari!
 
 ---
