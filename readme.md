@@ -1,7 +1,3 @@
-Here's a rewritten version of your README, tailored for a GitHub repository:
-
----
-
 # Website Vulnerability Scanner
 
 A powerful, asynchronous web security scanner that detects common vulnerabilities in websites. Built in Python, this tool leverages `asyncio`, `aiohttp`, and modular configuration for efficient, customizable, and scalable vulnerability scanning. Enhanced with AI-powered analysis and a vivid, user-friendly workflow.
