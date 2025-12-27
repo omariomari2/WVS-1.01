@@ -1,8 +1,10 @@
 aiohttp
 Flask
-python-dotenvhttp==3.9.1
 beautifulsoup4==4.12.2
 colorama==0.4.6
 google-generativeai==0.3.1
 python-dotenv==1.0.0
 pdfkit
+torch
+numpy
+scikit-learn

@@ -12,7 +12,6 @@ load_dotenv()
 import json
 scan_results = {}
 
-# Attempt to import CLI scan state if present
 MEMORY_FILE = 'cli_to_web_memory.json'
 if os.path.exists(MEMORY_FILE):
     try:
@@ -25,12 +24,9 @@ if os.path.exists(MEMORY_FILE):
             'url': cli_state.get('base_url', cli_state.get('url', '')),
             'depth': cli_state.get('depth', 2)
         }
-        # Optionally delete memory file after import
-        # os.remove(MEMORY_FILE)
     except Exception as e:
         print(f"Failed to import CLI scan state: {e}")
 
-# Helper to run async functions in threads
 loop = asyncio.new_event_loop()
 def run_async(coro):
     return loop.run_until_complete(coro)
@@ -39,7 +35,6 @@ def run_async(coro):
 def index():
     imported_url = None
     imported_depth = 2
-    # If imported scan exists and has no results, prefill form
     imported_scan = scan_results.get('imported_cli')
     if imported_scan:
         imported_url = imported_scan.get('url')
@@ -73,7 +68,6 @@ def scan_status(scan_id):
     result = scan_results.get(scan_id)
     if not result:
         return 'Scan not found', 404
-    # Aggregate all vulnerabilities for a single summary
     all_vulns = []
     if result.get('results') is not None:
         for _, vulns in result['results']:
@@ -82,7 +76,6 @@ def scan_status(scan_id):
         [classify_severity(v), v.split(':')[0] if ':' in v else v, v if ':' not in v else v.split(':', 1)[1].strip()]
         for v in all_vulns
     ]
-    # Pass classify_severity and summary_rows to the template context
     return render_template('scan_status.html', scan=result, scan_id=scan_id, classify_severity=classify_severity, summary_rows=summary_rows)
 
 @app.route('/download_report/<scan_id>')
@@ -91,7 +84,6 @@ def download_report(scan_id):
     result = scan_results.get(scan_id)
     if not result or not result.get('results'):
         return abort(404)
-    # Build plain text report
     lines = []
     lines.append(f"Website Vulnerability Scan Report\nScan ID: {scan_id}\n{'='*60}\n")
     for url, vulns in result['results']:
@@ -99,7 +91,6 @@ def download_report(scan_id):
         for idx, vuln in enumerate(vulns):
             lines.append(f"  {idx+1}. {vuln}")
         lines.append("\n" + "-"*50 + "\n")
-    # Summary Table
     all_vulns = [v for _, vulns in result['results'] for v in vulns]
     lines.append("SUMMARY TABLE:\n")
     lines.append(f"{'Severity':<10} | {'Type':<20} | Details")
@@ -128,7 +119,6 @@ def get_explanation():
     try:
         from vulnerability_analyzer import VulnerabilityAnalyzer
         analyzer = VulnerabilityAnalyzer(api_key)
-        # Run the async analysis in the event loop
         explanation = loop.run_until_complete(analyzer.analyze_vulnerabilities(url, [vuln]))
         return jsonify({'explanation': explanation})
     except Exception as e:

@@ -1,11 +1,8 @@
-# Configuration file for Website Vulnerability Scanner
-# Adjust scan parameters and options here
-
 scan:
-  max_depth: 2           # Default crawling depth
-  concurrency: 10        # Number of concurrent requests
-  exclude_urls: []       # List of URL patterns to exclude from scanning
-  custom_payloads:       # Custom payloads for vulnerability checks
+  max_depth: 2
+  concurrency: 10
+  exclude_urls: []
+  custom_payloads:
     sql_injection: "' OR '1'='1"
     xss: "<script>alert('XSS')</script>"
   respect_robots_txt: true
@@ -14,5 +11,3 @@ scan:
 report:
   export_formats: [txt, html, csv]
   show_dashboard: true
-
-# Add more options as needed
