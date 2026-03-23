@@ -127,7 +127,7 @@ export function ChatPanel({ scanId }: ChatPanelProps) {
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <div className="prose prose-invert prose-sm max-w-none [&_pre]:bg-[var(--background)] [&_pre]:border [&_pre]:border-[var(--card-border)] [&_pre]:rounded [&_code]:text-[var(--accent)]">
+                  <div className="markdown-body">
                     <ReactMarkdown>{msg.content || "..."}</ReactMarkdown>
                   </div>
                 ) : (
