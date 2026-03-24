@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VenomAI - OWASP Top 10 Security Scanner",
+  title: "wvs - OWASP Top 10 Security Scanner",
   description: "Scan web applications for OWASP Top 10 vulnerabilities with AI-powered explanations",
 };
 
@@ -18,8 +18,7 @@ export default function RootLayout({
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex h-14 items-center justify-between">
               <a href="/" className="flex items-center gap-2 font-bold text-lg">
-                <span className="text-[var(--accent)]">Venom</span>
-                <span>AI</span>
+                <span className="text-[var(--accent)]">wvs</span>
               </a>
               <div className="flex items-center gap-4">
                 <a

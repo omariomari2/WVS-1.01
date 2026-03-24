@@ -97,7 +97,7 @@ export function ChatPanel({ scanId }: ChatPanelProps) {
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center py-12">
-            <h3 className="font-semibold text-lg mb-2">Ask VenomAI</h3>
+            <h3 className="font-semibold text-lg mb-2">Ask wvs</h3>
             <p className="text-sm text-[var(--muted)] mb-6">
               Ask questions about the scan findings and get plain-English explanations.
             </p>

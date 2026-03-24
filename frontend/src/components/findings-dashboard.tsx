@@ -61,7 +61,7 @@ export function FindingsDashboard({ scanId, targetUrl }: FindingsDashboardProps)
           <a href={`/scans/${scanId}/chat`}>
             <Button size="sm">
               <MessageSquare className="h-4 w-4 mr-2" />
-              Ask VenomAI
+              Ask wvs
             </Button>
           </a>
         </div>
