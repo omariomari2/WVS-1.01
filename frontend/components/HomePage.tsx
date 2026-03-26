@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useLayoutEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import type { Finding } from "@/lib/types";
 import gsap from "gsap";
 import GridBackground from "./GridBackground";
@@ -58,6 +58,28 @@ export default function HomePage() {
       });
     }, navRef);
     return () => ctx.revert();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const importPr = params.get("import_pr");
+    if (!importPr) return;
+    // Clean the URL so refreshing doesn't re-trigger
+    window.history.replaceState({}, "", window.location.pathname);
+    setPrUrl(importPr);
+    setInputMode("scrape"); // switch to URL/PR tab
+    (async () => {
+      try {
+        showToast("Importing PR findings...", "success");
+        const scan = await createPrScan(importPr);
+        setScanId(scan.id);
+        setScanType("pr");
+        setButtonsVisible(true);
+        showToast("PR findings imported — choose an action above", "success");
+      } catch (err: any) {
+        showToast(err.message || "Failed to import PR scan", "error");
+      }
+    })();
   }, []);
 
   const handlePrReady = useCallback(async () => {

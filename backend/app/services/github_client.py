@@ -93,52 +93,84 @@ async def get_file_content(owner: str, repo: str, path: str, ref: str) -> str:
 async def download_workflow_artifacts(
     owner: str, repo: str, head_sha: str
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        async with _client() as c:
+            runs_resp = await c.get(
+                f"/repos/{owner}/{repo}/actions/runs",
+                params={"head_sha": head_sha, "event": "pull_request", "per_page": 10},
+            )
+            runs_resp.raise_for_status()
+            runs = runs_resp.json().get("workflow_runs", [])
+
+            target_run = None
+            for run in runs:
+                if "security" in run.get("name", "").lower() or "pr-security" in run.get("name", "").lower():
+                    target_run = run
+                    break
+            if not target_run and runs:
+                target_run = runs[0]
+            if not target_run:
+                return None, None
+
+            arts_resp = await c.get(
+                f"/repos/{owner}/{repo}/actions/runs/{target_run['id']}/artifacts",
+                params={"per_page": 50},
+            )
+            arts_resp.raise_for_status()
+            artifacts = arts_resp.json().get("artifacts", [])
+
+            base_findings = None
+            pr_findings = None
+
+            for art in artifacts:
+                name = art.get("name", "")
+                if name in ("base-findings", "pr-findings"):
+                    dl_resp = await c.get(
+                        f"/repos/{owner}/{repo}/actions/artifacts/{art['id']}/zip",
+                    )
+                    dl_resp.raise_for_status()
+                    zf = zipfile.ZipFile(io.BytesIO(dl_resp.content))
+                    for fname in zf.namelist():
+                        if fname.endswith(".json"):
+                            data = json.loads(zf.read(fname))
+                            if name == "base-findings":
+                                base_findings = data
+                            else:
+                                pr_findings = data
+                            break
+
+            return base_findings, pr_findings
+    except httpx.HTTPStatusError:
+        return None, None
+
+
+async def get_pr_comment_findings(
+    owner: str, repo: str, pr_number: int
+) -> dict[str, Any] | None:
+    """Extract base64-encoded findings from the VenomAI bot comment on a PR."""
+    import base64
+
+    marker = "<!-- venomai-findings:"
     async with _client() as c:
-        runs_resp = await c.get(
-            f"/repos/{owner}/{repo}/actions/runs",
-            params={"head_sha": head_sha, "event": "pull_request", "per_page": 10},
-        )
-        runs_resp.raise_for_status()
-        runs = runs_resp.json().get("workflow_runs", [])
-
-        target_run = None
-        for run in runs:
-            if "security" in run.get("name", "").lower() or "pr-security" in run.get("name", "").lower():
-                target_run = run
+        page = 1
+        while True:
+            resp = await c.get(
+                f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
+                params={"per_page": 100, "page": page},
+            )
+            resp.raise_for_status()
+            comments = resp.json()
+            if not comments:
                 break
-        if not target_run and runs:
-            target_run = runs[0]
-        if not target_run:
-            return None, None
-
-        arts_resp = await c.get(
-            f"/repos/{owner}/{repo}/actions/runs/{target_run['id']}/artifacts",
-            params={"per_page": 50},
-        )
-        arts_resp.raise_for_status()
-        artifacts = arts_resp.json().get("artifacts", [])
-
-        base_findings = None
-        pr_findings = None
-
-        for art in artifacts:
-            name = art.get("name", "")
-            if name in ("base-findings", "pr-findings"):
-                dl_resp = await c.get(
-                    f"/repos/{owner}/{repo}/actions/artifacts/{art['id']}/zip",
-                )
-                dl_resp.raise_for_status()
-                zf = zipfile.ZipFile(io.BytesIO(dl_resp.content))
-                for fname in zf.namelist():
-                    if fname.endswith(".json"):
-                        data = json.loads(zf.read(fname))
-                        if name == "base-findings":
-                            base_findings = data
-                        else:
-                            pr_findings = data
-                        break
-
-        return base_findings, pr_findings
+            for comment in comments:
+                body = comment.get("body", "")
+                if marker in body:
+                    start = body.index(marker) + len(marker)
+                    end = body.index(" -->", start)
+                    encoded = body[start:end]
+                    return json.loads(base64.b64decode(encoded).decode("utf-8"))
+            page += 1
+    return None
 
 
 async def post_review_comment(

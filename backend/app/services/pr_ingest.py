@@ -7,9 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session
 from app.models import Finding, PrCommit, Scan
-from app.sast.base import ScanSnapshot
-from app.sast.diff_engine import compare_findings
-from app.scanner.severity import Severity
 from app.services import github_client, local_repo
 
 
@@ -68,95 +65,65 @@ async def run_pr_ingest(scan_id: str, pr_url: str):
                 file_patches[f.get("filename", "")] = f.get("patch", "")
 
             scan.progress = 0.5
-            scan.current_module = "Downloading SAST artifacts"
+            scan.current_module = "Extracting findings from PR comment"
             await db.commit()
 
-            base_snapshot_data, head_snapshot_data = await github_client.download_workflow_artifacts(
-                owner, repo_name, scan.head_sha or ""
+            diff_data = await github_client.get_pr_comment_findings(
+                owner, repo_name, pr_number
             )
 
             all_findings: list[dict] = []
 
-            if base_snapshot_data and head_snapshot_data:
+            if diff_data:
                 scan.progress = 0.7
-                scan.current_module = "Comparing findings"
+                scan.current_module = "Importing findings from bot comment"
                 await db.commit()
 
-                base_snapshot = ScanSnapshot.from_dict(base_snapshot_data)
-                head_snapshot = ScanSnapshot.from_dict(head_snapshot_data)
-                diff = compare_findings(
-                    base_snapshot.findings, head_snapshot.findings, Severity.HIGH
-                )
+                for category_key in ("new_findings", "blocking_findings"):
+                    for sf_dict in diff_data.get(category_key, []):
+                        # Avoid duplicates between new and blocking
+                        if category_key == "blocking_findings":
+                            fingerprints = {f.get("fingerprint") for f in diff_data.get("new_findings", [])}
+                            if sf_dict.get("fingerprint") in fingerprints:
+                                continue
 
-                for sf in diff.new_findings:
-                    code_snippet = None
-                    if repo_path and sf.file_path and sf.line:
-                        code_snippet = local_repo.read_file_lines(
-                            repo_path, sf.file_path, sf.line, context=5
-                        )
-                    elif sf.file_path and sf.line and scan.head_sha:
-                        try:
-                            content = await github_client.get_file_content(
-                                owner, repo_name, sf.file_path, scan.head_sha
+                        code_snippet = None
+                        sf_file = sf_dict.get("file_path")
+                        sf_line = sf_dict.get("line")
+                        if repo_path and sf_file and sf_line:
+                            code_snippet = local_repo.read_file_lines(
+                                repo_path, sf_file, sf_line, context=5
                             )
-                            lines = content.splitlines()
-                            start = max(0, sf.line - 6)
-                            end = min(len(lines), sf.line + 5)
-                            numbered = [f"{i + 1:>4} | {lines[i]}" for i in range(start, end)]
-                            code_snippet = "\n".join(numbered)
-                        except Exception:
-                            pass
 
-                    diff_hunk = file_patches.get(sf.file_path or "", None)
+                        diff_hunk = file_patches.get(sf_file or "", None)
+                        severity = sf_dict.get("severity", "Medium")
+                        if isinstance(severity, dict):
+                            severity = severity.get("value", "Medium")
+                        confidence = sf_dict.get("confidence", "Medium")
+                        if isinstance(confidence, dict):
+                            confidence = confidence.get("value", "Medium")
 
-                    all_findings.append({
-                        "owasp_category": sf.owasp or sf.category,
-                        "owasp_name": sf.title,
-                        "severity": sf.severity.value if hasattr(sf.severity, "value") else str(sf.severity),
-                        "title": sf.title,
-                        "description": sf.message,
-                        "evidence": sf.evidence,
-                        "url": pr_url,
-                        "remediation": sf.remediation or "",
-                        "confidence": sf.confidence.value if hasattr(sf.confidence, "value") else str(sf.confidence),
-                        "file_path": sf.file_path,
-                        "line_number": sf.line,
-                        "commit_sha": None,
-                        "code_snippet": code_snippet,
-                        "diff_hunk": _truncate(diff_hunk, 2000) if diff_hunk else None,
-                        "rule_id": sf.rule_id,
-                        "cwe": sf.cwe,
-                    })
-            elif head_snapshot_data:
-                head_snapshot = ScanSnapshot.from_dict(head_snapshot_data)
-                for sf in head_snapshot.findings:
-                    code_snippet = None
-                    if repo_path and sf.file_path and sf.line:
-                        code_snippet = local_repo.read_file_lines(
-                            repo_path, sf.file_path, sf.line, context=5
-                        )
-
-                    all_findings.append({
-                        "owasp_category": sf.owasp or sf.category,
-                        "owasp_name": sf.title,
-                        "severity": sf.severity.value if hasattr(sf.severity, "value") else str(sf.severity),
-                        "title": sf.title,
-                        "description": sf.message,
-                        "evidence": sf.evidence,
-                        "url": pr_url,
-                        "remediation": sf.remediation or "",
-                        "confidence": sf.confidence.value if hasattr(sf.confidence, "value") else str(sf.confidence),
-                        "file_path": sf.file_path,
-                        "line_number": sf.line,
-                        "commit_sha": None,
-                        "code_snippet": code_snippet,
-                        "diff_hunk": _truncate(file_patches.get(sf.file_path or "", ""), 2000) or None,
-                        "rule_id": sf.rule_id,
-                        "cwe": sf.cwe,
-                    })
+                        all_findings.append({
+                            "owasp_category": sf_dict.get("owasp") or sf_dict.get("category", ""),
+                            "owasp_name": sf_dict.get("title", ""),
+                            "severity": severity,
+                            "title": sf_dict.get("title", ""),
+                            "description": sf_dict.get("message", ""),
+                            "evidence": sf_dict.get("evidence"),
+                            "url": pr_url,
+                            "remediation": sf_dict.get("remediation") or "",
+                            "confidence": confidence,
+                            "file_path": sf_file,
+                            "line_number": sf_line,
+                            "commit_sha": None,
+                            "code_snippet": code_snippet,
+                            "diff_hunk": _truncate(diff_hunk, 2000) if diff_hunk else None,
+                            "rule_id": sf_dict.get("rule_id"),
+                            "cwe": sf_dict.get("cwe"),
+                        })
             else:
                 scan.progress = 0.7
-                scan.current_module = "No SAST artifacts found — importing PR file changes"
+                scan.current_module = "No bot comment found — importing PR file changes"
                 await db.commit()
 
                 for f in pr_files:

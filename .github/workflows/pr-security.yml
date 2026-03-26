@@ -177,8 +177,14 @@ jobs:
           script: |
             const fs = require("fs");
             const body = fs.readFileSync("artifacts/report/pr-security-summary.md", "utf8");
+            const diffJson = fs.readFileSync("artifacts/report/diff-findings.json", "utf8");
+            const encoded = Buffer.from(diffJson).toString("base64");
             const marker = "<!-- venomai-pr-security -->";
-            const commentBody = `${marker}\n${body}`;
+            const dataTag = `<!-- venomai-findings:${encoded} -->`;
+            const prUrl = context.payload.pull_request.html_url;
+            const appLink = `http://localhost:4500?import_pr=${encodeURIComponent(prUrl)}`;
+            const linkLine = `\n\n---\n[:mag: **Open in VenomAI Dashboard**](${appLink})\n`;
+            const commentBody = `${marker}\n${dataTag}\n${body}${linkLine}`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const comments = await github.paginate(github.rest.issues.listComments, {
