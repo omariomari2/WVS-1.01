@@ -66,7 +66,7 @@ def test_export_route_wins_over_dynamic_finding_route() -> None:
     response = client.get("/api/scans/scan-1/findings/export/file?format=json")
 
     assert response.status_code == 200
-    assert response.headers["content-disposition"] == 'attachment; filename="findings.json"'
+    assert response.headers["content-disposition"] == 'attachment; filename="wvs_report.json"'
     payload = response.json()
     assert payload["target_url"] == "https://example.com"
     assert payload["findings"][0]["title"] == "Admin page exposed"

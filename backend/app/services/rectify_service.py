@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import anthropic
@@ -23,110 +22,180 @@ def _language_from_path(file_path: str) -> str:
     return ext_map.get(suffix, "")
 
 
-async def send_to_cursor(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
-    prompt = await _build_cursor_prompt(scan, finding)
+async def send_to_claude(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
+    del db
 
-    local_repo.copy_to_clipboard(prompt)
-
-    if finding.file_path and scan.local_repo_path:
-        repo_path = Path(scan.local_repo_path)
-        line = finding.line_number or 1
-        await local_repo.open_in_cursor(repo_path, finding.file_path, line)
-
-    if scan.local_repo_path and finding.id:
-        repo_path = Path(scan.local_repo_path)
-        local_repo.write_prompt_file(repo_path, finding.id, prompt)
-
-    return {
-        "success": True,
-        "action": "send_to_cursor",
-        "finding_id": finding.id,
-        "content": prompt,
-        "message": "Fix prompt copied to clipboard and file opened in Cursor.",
-    }
-
-
-async def apply_fix(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
-    if not scan.local_repo_path or not finding.file_path:
+    if not scan.local_repo_path:
         return {
             "success": False,
-            "action": "apply_fix",
+            "action": "send_to_claude",
             "finding_id": finding.id,
-            "message": "No local repo path or file path available.",
+            "message": "This PR is not linked to a local repository.",
+        }
+    if not finding.file_path:
+        return {
+            "success": False,
+            "action": "send_to_claude",
+            "finding_id": finding.id,
+            "message": "This finding is missing a target file path.",
         }
 
     repo_path = Path(scan.local_repo_path)
-    file_content = local_repo.read_file(repo_path, finding.file_path)
-    if file_content is None:
+    target_path = repo_path / finding.file_path
+    if not target_path.is_file():
         return {
             "success": False,
-            "action": "apply_fix",
+            "action": "send_to_claude",
             "finding_id": finding.id,
-            "message": f"Cannot read file: {finding.file_path}",
+            "message": f"Target file not found in the local repo: {finding.file_path}",
         }
 
-    lines = file_content.splitlines()
-    if finding.line_number:
-        start = max(0, finding.line_number - 6)
-        end = min(len(lines), finding.line_number + 5)
-    else:
-        start = 0
-        end = len(lines)
+    prompt = await _build_claude_prompt(scan, finding)
+    prompt_path = local_repo.write_prompt_file(repo_path, finding.id, prompt)
 
-    original_block = "\n".join(lines[start:end])
-    lang = _language_from_path(finding.file_path)
+    try:
+        local_repo.launch_claude_in_terminal(repo_path, prompt_path)
+    except Exception as exc:
+        return {
+            "success": False,
+            "action": "send_to_claude",
+            "finding_id": finding.id,
+            "content": prompt,
+            "message": f"Could not launch Claude Code: {exc}",
+        }
+
+    return {
+        "success": True,
+        "action": "send_to_claude",
+        "finding_id": finding.id,
+        "content": prompt,
+        "message": f"Claude Code opened in a new terminal using {prompt_path.name}.",
+    }
+
+
+async def pr_comment_ai(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
+    del db
+
+    metadata_error = _comment_metadata_error(scan, finding.id, "pr_comment_ai")
+    if metadata_error:
+        return metadata_error
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     response = await client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        system="You are a security-focused code fixer. Return ONLY the fixed replacement code. No explanations, no markdown fences, no comments. Just the corrected code that replaces the original block.",
+        max_tokens=1024,
+        system=(
+            "You are a security reviewer posting an inline comment on a GitHub PR. "
+            "Write a concise, actionable comment that explains the vulnerability, "
+            "its impact, and gives a specific fix suggestion. Use GitHub markdown. "
+            "Keep it under 200 words."
+        ),
         messages=[{
             "role": "user",
-            "content": (
-                f"Fix this {finding.severity} security vulnerability.\n\n"
-                f"File: {finding.file_path}\n"
-                f"Issue: {finding.title}\n"
-                f"Description: {finding.description}\n"
-                f"Remediation: {finding.remediation}\n\n"
-                f"Original code (lines {start + 1}-{end}):\n"
-                f"```{lang}\n{original_block}\n```\n\n"
-                f"Return ONLY the fixed version of these exact lines."
-            ),
+            "content": _build_comment_context(finding),
         }],
     )
 
-    patched_block = response.content[0].text.strip()
-    if patched_block.startswith("```"):
-        first_nl = patched_block.index("\n")
-        patched_block = patched_block[first_nl + 1:]
-    if patched_block.endswith("```"):
-        patched_block = patched_block[:-3].rstrip()
+    comment_body = response.content[0].text.strip()
+    return await _post_pr_comment(
+        scan,
+        finding,
+        comment_body,
+        action="pr_comment_ai",
+        issue_header=_issue_header(finding),
+        failure_prefix="Generated comment but failed to post",
+    )
 
-    diff_preview = _build_diff(original_block, patched_block, finding.file_path, start + 1)
 
-    applied = local_repo.apply_patch(repo_path, finding.file_path, original_block, patched_block)
+async def pr_comment_manual(
+    db: AsyncSession, scan: Scan, finding: Finding, comment: str
+) -> dict:
+    del db
 
+    metadata_error = _comment_metadata_error(scan, finding.id, "pr_comment_manual")
+    if metadata_error:
+        return metadata_error
+
+    comment_body = comment.strip()
+    if not comment_body:
+        return {
+            "success": False,
+            "action": "pr_comment_manual",
+            "finding_id": finding.id,
+            "message": "Comment cannot be empty.",
+        }
+
+    return await _post_pr_comment(
+        scan,
+        finding,
+        comment_body,
+        action="pr_comment_manual",
+        failure_prefix="Failed to post comment",
+    )
+
+
+def _comment_metadata_error(scan: Scan, finding_id: str, action: str) -> dict | None:
+    if scan.repo_owner and scan.repo_name and scan.pr_number:
+        return None
     return {
-        "success": applied,
-        "action": "apply_fix",
-        "finding_id": finding.id,
-        "content": patched_block,
-        "diff_preview": diff_preview,
-        "message": "Fix applied to local file." if applied else "Could not apply patch — original code block not found in file.",
+        "success": False,
+        "action": action,
+        "finding_id": finding_id,
+        "message": "Missing PR metadata to post a comment.",
     }
 
 
-async def pr_comment(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
-    if not scan.repo_owner or not scan.repo_name or not scan.pr_number:
+async def _post_pr_comment(
+    scan: Scan,
+    finding: Finding,
+    comment_body: str,
+    *,
+    action: str,
+    issue_header: str | None = None,
+    failure_prefix: str,
+) -> dict:
+    try:
+        if finding.file_path and finding.line_number:
+            await github_client.post_review_comment(
+                scan.repo_owner,
+                scan.repo_name,
+                scan.pr_number,
+                comment_body,
+                finding.file_path,
+                finding.line_number,
+            )
+        else:
+            issue_body = comment_body
+            if issue_header:
+                issue_body = f"{issue_header}\n\n{comment_body}"
+            await github_client.post_issue_comment(
+                scan.repo_owner,
+                scan.repo_name,
+                scan.pr_number,
+                issue_body,
+            )
+        return {
+            "success": True,
+            "action": action,
+            "finding_id": finding.id,
+            "content": comment_body,
+            "message": "Comment posted on PR.",
+        }
+    except Exception as exc:
         return {
             "success": False,
-            "action": "pr_comment",
+            "action": action,
             "finding_id": finding.id,
-            "message": "Missing PR metadata to post a comment.",
+            "content": comment_body,
+            "message": f"{failure_prefix}: {exc}",
         }
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+def _issue_header(finding: Finding) -> str:
+    return f"**{finding.severity}: {finding.title}**"
+
+
+def _build_comment_context(finding: Finding) -> str:
     context_parts = [
         f"Severity: {finding.severity}",
         f"OWASP: {finding.owasp_category} - {finding.owasp_name}",
@@ -139,133 +208,10 @@ async def pr_comment(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
     context_parts.append(f"Remediation: {finding.remediation}")
     if finding.code_snippet:
         context_parts.append(f"Code context:\n{finding.code_snippet}")
-
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=(
-            "You are a security reviewer posting an inline comment on a GitHub PR. "
-            "Write a concise, actionable comment that explains the vulnerability, "
-            "its impact, and gives a specific fix suggestion. Use GitHub markdown. "
-            "Keep it under 200 words."
-        ),
-        messages=[{
-            "role": "user",
-            "content": "\n".join(context_parts),
-        }],
-    )
-
-    comment_body = response.content[0].text.strip()
-
-    try:
-        if finding.file_path and finding.line_number:
-            await github_client.post_review_comment(
-                scan.repo_owner, scan.repo_name, scan.pr_number,
-                comment_body, finding.file_path, finding.line_number,
-            )
-        else:
-            await github_client.post_issue_comment(
-                scan.repo_owner, scan.repo_name, scan.pr_number,
-                f"**{finding.severity}: {finding.title}**\n\n{comment_body}",
-            )
-        return {
-            "success": True,
-            "action": "pr_comment",
-            "finding_id": finding.id,
-            "content": comment_body,
-            "message": "Comment posted on PR.",
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "action": "pr_comment",
-            "finding_id": finding.id,
-            "content": comment_body,
-            "message": f"Generated comment but failed to post: {e}",
-        }
+    return "\n".join(context_parts)
 
 
-async def full_review(db: AsyncSession, scan: Scan, findings: list[Finding]) -> dict:
-    if not scan.repo_owner or not scan.repo_name or not scan.pr_number:
-        return {
-            "success": False,
-            "action": "full_review",
-            "finding_id": "",
-            "message": "Missing PR metadata to post a review.",
-        }
-
-    findings_summary = []
-    for f in findings:
-        entry = f"- [{f.severity}] {f.title}"
-        if f.file_path:
-            entry += f" in `{f.file_path}"
-            if f.line_number:
-                entry += f":{f.line_number}"
-            entry += "`"
-        entry += f"\n  {f.description}"
-        if f.remediation:
-            entry += f"\n  Fix: {f.remediation}"
-        findings_summary.append(entry)
-
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        system=(
-            "You are a security reviewer writing a comprehensive GitHub PR review. "
-            "Summarize the findings, explain the overall security posture, "
-            "and give prioritized recommendations. Use GitHub markdown."
-        ),
-        messages=[{
-            "role": "user",
-            "content": (
-                f"PR: {scan.pr_title or scan.pr_url}\n"
-                f"Branch: {scan.pr_branch} -> {scan.base_branch}\n"
-                f"Total findings: {len(findings)}\n\n"
-                + "\n\n".join(findings_summary)
-            ),
-        }],
-    )
-
-    review_body = response.content[0].text.strip()
-
-    has_blocking = any(f.severity in ("Critical", "High") for f in findings)
-    event = "REQUEST_CHANGES" if has_blocking else "COMMENT"
-
-    inline_comments = []
-    for f in findings:
-        if f.file_path and f.line_number:
-            inline_comments.append({
-                "path": f.file_path,
-                "line": f.line_number,
-                "side": "RIGHT",
-                "body": f"**{f.severity}: {f.title}**\n{f.description}\n\n**Fix:** {f.remediation}",
-            })
-
-    try:
-        await github_client.post_review(
-            scan.repo_owner, scan.repo_name, scan.pr_number,
-            review_body, event,
-            inline_comments if inline_comments else None,
-        )
-        return {
-            "success": True,
-            "action": "full_review",
-            "finding_id": "",
-            "content": review_body,
-            "message": f"Security review posted ({event}).",
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "action": "full_review",
-            "finding_id": "",
-            "content": review_body,
-            "message": f"Generated review but failed to post: {e}",
-        }
-
-
-async def _build_cursor_prompt(scan: Scan, finding: Finding) -> str:
+async def _build_claude_prompt(scan: Scan, finding: Finding) -> str:
     code_snippet = finding.code_snippet
     if not code_snippet and scan.local_repo_path and finding.file_path:
         repo_path = Path(scan.local_repo_path)
@@ -274,47 +220,47 @@ async def _build_cursor_prompt(scan: Scan, finding: Finding) -> str:
 
     lang = _language_from_path(finding.file_path or "")
     parts = [
-        f"Fix a {finding.severity} security vulnerability in @{finding.file_path}",
+        "Fix this security finding in the local repository.",
+        "",
+        f"Repository: {scan.repo_owner}/{scan.repo_name}" if scan.repo_owner and scan.repo_name else "Repository: local checkout",
+        f"File: {finding.file_path or 'unknown'}",
     ]
     if finding.line_number:
-        parts[0] += f" at line {finding.line_number}"
-    parts[0] += "."
-
-    parts.append("")
-    parts.append(f"**Issue:** {finding.title} ({finding.owasp_category} - {finding.owasp_name})")
+        parts.append(f"Line: {finding.line_number}")
+    parts.extend(
+        [
+            f"Severity: {finding.severity}",
+            f"Issue: {finding.title} ({finding.owasp_category} - {finding.owasp_name})",
+        ]
+    )
     if finding.cwe:
-        parts.append(f"**CWE:** {finding.cwe}")
+        parts.append(f"CWE: {finding.cwe}")
 
     if code_snippet:
-        parts.append("")
-        parts.append("**Current code:**")
-        parts.append(f"```{lang}")
-        parts.append(code_snippet)
-        parts.append("```")
+        parts.extend(
+            [
+                "",
+                "Code context:",
+                f"```{lang}",
+                code_snippet,
+                "```",
+            ]
+        )
 
-    parts.append("")
-    parts.append(f"**What's wrong:** {finding.description}")
-
+    parts.extend(
+        [
+            "",
+            f"What is wrong: {finding.description}",
+        ]
+    )
     if finding.evidence:
-        parts.append("")
-        parts.append(f"**Evidence:** {finding.evidence}")
-
-    parts.append("")
-    parts.append(f"**How to fix:** {finding.remediation}")
-
-    parts.append("")
-    parts.append("Apply the fix in place. Preserve existing functionality. Do not add comments.")
+        parts.append(f"Evidence: {finding.evidence}")
+    parts.extend(
+        [
+            f"How to fix: {finding.remediation}",
+            "",
+            "Update the repository in place. Preserve existing behavior, keep the fix scoped to this finding, and explain any assumptions before editing code.",
+        ]
+    )
 
     return "\n".join(parts)
-
-
-def _build_diff(original: str, patched: str, file_path: str, start_line: int) -> str:
-    orig_lines = original.splitlines()
-    patch_lines = patched.splitlines()
-    diff_lines = [f"--- a/{file_path}", f"+++ b/{file_path}"]
-    diff_lines.append(f"@@ -{start_line},{len(orig_lines)} +{start_line},{len(patch_lines)} @@")
-    for line in orig_lines:
-        diff_lines.append(f"-{line}")
-    for line in patch_lines:
-        diff_lines.append(f"+{line}")
-    return "\n".join(diff_lines)

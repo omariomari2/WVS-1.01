@@ -80,7 +80,11 @@ export interface RectifyResponse {
   message: string | null;
 }
 
-export type RectifyAction = "send" | "apply" | "comment" | "review";
+export type RectifyAction =
+  | "send_to_claude"
+  | "pr_comment_ai"
+  | "pr_comment_manual"
+  | "study_type";
 
 export const FINDING_FILTER_OPTIONS = [
   { id: "all", label: "All" },

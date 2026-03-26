@@ -44,7 +44,7 @@ export default function FindingsChatDrawer({
       setLocalFinding(externalFinding);
       onClearAttachedFinding?.();
     }
-  }, [externalFinding]);
+  }, [externalFinding, onClearAttachedFinding]);
 
   useEffect(() => {
     if (!open) setLocalFinding(null);

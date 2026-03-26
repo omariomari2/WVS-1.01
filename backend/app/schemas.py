@@ -72,9 +72,9 @@ class RectifyRequest(BaseModel):
     finding_id: str
 
 
-class RectifyBatchRequest(BaseModel):
-    finding_ids: list[str]
-    action: str
+class RectifyManualCommentRequest(BaseModel):
+    finding_id: str
+    comment: str
 
 
 class RectifyResponse(BaseModel):

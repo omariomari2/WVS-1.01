@@ -177,70 +177,45 @@ export async function getPrCommits(scanId: string): Promise<PrCommit[]> {
   return res.json();
 }
 
-export async function rectifySend(scanId: string, findingId: string): Promise<RectifyResponse> {
-  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/send`, {
+export async function sendFindingToClaude(scanId: string, findingId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/claude`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ finding_id: findingId }),
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Rectify send failed");
+    throw new Error(err.detail || "Failed to send finding to Claude");
   }
   return res.json();
 }
 
-export async function rectifyApply(scanId: string, findingId: string): Promise<RectifyResponse> {
-  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/apply`, {
+export async function postAiPrComment(scanId: string, findingId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/comment/ai`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ finding_id: findingId }),
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Rectify apply failed");
+    throw new Error(err.detail || "Failed to post AI comment");
   }
   return res.json();
 }
 
-export async function rectifyComment(scanId: string, findingId: string): Promise<RectifyResponse> {
-  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/comment`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ finding_id: findingId }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Rectify comment failed");
-  }
-  return res.json();
-}
-
-export async function rectifyReview(scanId: string): Promise<RectifyResponse> {
-  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/review`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || "Rectify review failed");
-  }
-  return res.json();
-}
-
-export async function rectifyBatch(
+export async function postManualPrComment(
   scanId: string,
-  findingIds: string[],
-  action: "send" | "apply" | "comment"
-): Promise<RectifyResponse[]> {
-  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/batch`, {
+  findingId: string,
+  comment: string
+): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/comment/manual`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ finding_ids: findingIds, action }),
+    body: JSON.stringify({ finding_id: findingId, comment }),
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Rectify batch failed");
+    throw new Error(err.detail || "Failed to post manual comment");
   }
   return res.json();
 }

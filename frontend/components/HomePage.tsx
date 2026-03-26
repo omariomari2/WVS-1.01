@@ -10,7 +10,7 @@ import InputSection from "./InputSection";
 import DecorativeSvgs from "./DecorativeSvgs";
 import FindingsChatDrawer from "./FindingsChatDrawer";
 import LeftSidebar from "./LeftSidebar";
-import RectifyDrawer from "./RectifyDrawer";
+import RectifyPopup from "./RectifyPopup";
 import ExportDropdown, { type ExportFormat } from "./ExportDropdown";
 import ToastContainer, { showToast } from "./Toast";
 import {
@@ -43,6 +43,7 @@ export default function HomePage() {
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
   const [chatAttachedFinding, setChatAttachedFinding] = useState<Finding | null>(null);
   const navRef = useRef<HTMLElement>(null);
+  const rectifyBtnRef = useRef<HTMLDivElement>(null);
   const exportBtnRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -123,9 +124,37 @@ export default function HomePage() {
     setButtonsVisible(false);
   }, []);
 
-  const handleRectify = useCallback(() => {
-    setIsRectifyOpen((prev) => !prev);
-  }, []);
+  useEffect(() => {
+    if (scanType !== "pr" && isRectifyOpen) {
+      setIsRectifyOpen(false);
+    }
+  }, [isRectifyOpen, scanType]);
+
+  const handleRectify = useCallback(async () => {
+    if (!scanId || scanType !== "pr") {
+      showToast("Rectify is available only for PR scans.", "info");
+      return;
+    }
+
+    setLoadingBtn("sec");
+    try {
+      const scan = await getPrScan(scanId);
+      if (scan.status === "failed") {
+        showToast("The PR scan failed, so rectify actions are unavailable.", "error");
+        return;
+      }
+      if (scan.status !== "completed") {
+        showToast("PR findings are still loading. Try Rectify again once the scan completes.", "info");
+        return;
+      }
+      setIsExportOpen(false);
+      setIsRectifyOpen((prev) => !prev);
+    } catch (err: any) {
+      showToast(err.message || "Failed to open rectify actions", "error");
+    } finally {
+      setLoadingBtn(null);
+    }
+  }, [scanId, scanType]);
 
   const handleExploreFindings = useCallback(() => {
     setIsChatOpen((prev) => !prev);
@@ -187,9 +216,9 @@ export default function HomePage() {
     [scanId]
   );
 
-  const handleSummarize = useCallback(async () => {
+  const handleSummarize = useCallback(() => {
     setIsLeftSidebarOpen((prev) => !prev);
-  }, [uploadedHTML, scrapeMode, scrapeUrl]);
+  }, []);
 
   return (
     <>
@@ -210,9 +239,10 @@ export default function HomePage() {
       <ActionButton
         label={loadingBtn === "sec" ? "Rectify..." : "Rectify"}
         variant="sec"
-        visible={buttonsVisible}
+        visible={buttonsVisible && scanType === "pr"}
         onClick={handleRectify}
         disabled={loadingBtn === "sec"}
+        buttonRef={rectifyBtnRef}
       />
       <ActionButton
         label={loadingBtn === "third" ? "Export Logs..." : "Export Logs"}
@@ -246,14 +276,13 @@ export default function HomePage() {
         open={isLeftSidebarOpen}
         onClose={() => setIsLeftSidebarOpen(false)}
         scanId={scanId}
-        scanType={scanType}
         onAskAI={handleAskAI}
       />
-      <RectifyDrawer
+      <RectifyPopup
         open={isRectifyOpen}
         onClose={() => setIsRectifyOpen(false)}
         scanId={scanId}
-        scanType={scanType}
+        anchorRef={rectifyBtnRef}
       />
       <FindingsChatDrawer
         open={isChatOpen}

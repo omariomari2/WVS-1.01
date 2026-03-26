@@ -3,14 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import ThemeDropdown from "./ThemeDropdown";
-import { getFindings, rectifySend } from "@/lib/api";
+import { getFindings } from "@/lib/api";
 import type { Finding, FindingFilter } from "@/lib/types";
 
 interface LeftSidebarProps {
   open: boolean;
   onClose: () => void;
   scanId: string | null;
-  scanType?: "url" | "pr";
   onAskAI?: (finding: Finding) => void;
 }
 
@@ -22,28 +21,12 @@ function normalizeSeverity(
 
 function FindingAccordion({
   finding,
-  scanId,
-  scanType,
   onAskAI,
 }: {
   finding: Finding;
-  scanId?: string | null;
-  scanType?: "url" | "pr";
   onAskAI?: (finding: Finding) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [fixLoading, setFixLoading] = useState(false);
-
-  async function handleFix() {
-    if (!scanId) return;
-    setFixLoading(true);
-    try {
-      await rectifySend(scanId, finding.id);
-    } catch {
-    } finally {
-      setFixLoading(false);
-    }
-  }
 
   return (
     <article className="finding-accordion">
@@ -66,17 +49,6 @@ function FindingAccordion({
           )}
         </button>
         <div className="finding-accordion-actions">
-          {scanType === "pr" && scanId && (
-            <button
-              type="button"
-              className="finding-ai-btn"
-              title="Send fix prompt to Cursor"
-              disabled={fixLoading}
-              onClick={handleFix}
-            >
-              {fixLoading ? "..." : "Fix"}
-            </button>
-          )}
           {onAskAI && (
             <button
               type="button"
@@ -120,7 +92,6 @@ export default function LeftSidebar({
   open,
   onClose,
   scanId,
-  scanType = "url",
   onAskAI,
 }: LeftSidebarProps) {
   const [filter, setFilter] = useState<FindingFilter>("all");
@@ -253,8 +224,6 @@ export default function LeftSidebar({
                 <FindingAccordion
                   key={finding.id}
                   finding={finding}
-                  scanId={scanId}
-                  scanType={scanType}
                   onAskAI={onAskAI}
                 />
               ))}

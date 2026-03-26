@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import shutil
 import subprocess
 import sys
@@ -64,60 +63,38 @@ def get_current_branch(repo_path: Path) -> str | None:
     return None
 
 
-def apply_patch(repo_path: Path, file_path: str, original_lines: str, patched_lines: str) -> bool:
-    target = repo_path / file_path
-    if not target.is_file():
-        return False
-    content = target.read_text(encoding="utf-8", errors="replace")
-    if original_lines not in content:
-        return False
-    backup = target.with_suffix(target.suffix + ".venomai.bak")
-    shutil.copy2(target, backup)
-    new_content = content.replace(original_lines, patched_lines, 1)
-    target.write_text(new_content, encoding="utf-8")
-    return True
-
-
-async def open_in_cursor(repo_path: Path, file_path: str, line: int) -> bool:
-    abs_path = repo_path / file_path
-    if not abs_path.is_file():
-        return False
-    cmd = ["cursor", "--goto", f"{abs_path}:{line}"]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-    await proc.wait()
-    return proc.returncode == 0
-
-
-def copy_to_clipboard(text: str) -> bool:
-    if PLATFORM_IS_WINDOWS:
-        proc = subprocess.run(
-            ["clip.exe"],
-            input=text,
-            encoding="utf-8",
-            capture_output=True,
-        )
-        return proc.returncode == 0
-    if shutil.which("pbcopy"):
-        proc = subprocess.run(["pbcopy"], input=text, encoding="utf-8", capture_output=True)
-        return proc.returncode == 0
-    if shutil.which("xclip"):
-        proc = subprocess.run(
-            ["xclip", "-selection", "clipboard"],
-            input=text,
-            encoding="utf-8",
-            capture_output=True,
-        )
-        return proc.returncode == 0
-    return False
-
-
 def write_prompt_file(repo_path: Path, finding_id: str, prompt: str) -> Path:
     prompts_dir = repo_path / ".venomai-prompts"
     prompts_dir.mkdir(exist_ok=True)
     prompt_path = prompts_dir / f"fix-{finding_id}.md"
     prompt_path.write_text(prompt, encoding="utf-8")
     return prompt_path
+
+
+def launch_claude_in_terminal(repo_path: Path, prompt_path: Path) -> None:
+    if not PLATFORM_IS_WINDOWS:
+        raise RuntimeError("Claude launch is currently supported only on Windows.")
+    if not repo_path.is_dir():
+        raise RuntimeError(f"Local repo path not found: {repo_path}")
+    if not prompt_path.is_file():
+        raise RuntimeError(f"Prompt file not found: {prompt_path}")
+    if shutil.which("claude") is None:
+        raise RuntimeError("Claude Code CLI not found on PATH.")
+
+    repo_literal = _powershell_literal(str(repo_path))
+    prompt_literal = _powershell_literal(str(prompt_path))
+    command = (
+        f"Set-Location -LiteralPath '{repo_literal}'; "
+        f"$prompt = Get-Content -Raw -LiteralPath '{prompt_literal}'; "
+        "claude $prompt"
+    )
+
+    subprocess.Popen(
+        ["powershell.exe", "-NoExit", "-Command", command],
+        cwd=str(repo_path),
+        creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+    )
+
+
+def _powershell_literal(value: str) -> str:
+    return value.replace("'", "''")
