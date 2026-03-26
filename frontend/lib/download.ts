@@ -23,6 +23,9 @@ const PICKER_TYPES: Record<
   json: [
     { description: "JSON File", accept: { "application/json": [".json"] } },
   ],
+  md: [
+    { description: "Markdown File", accept: { "text/markdown": [".md"] } },
+  ],
 };
 
 export function supportsFilePicker(): boolean {
@@ -118,7 +121,7 @@ async function saveBlobWithPicker(
 export async function downloadBlob(
   blob: Blob,
   filename: string,
-  type: "html" | "zip" | "pdf" | "csv" | "json",
+  type: "html" | "zip" | "pdf" | "csv" | "json" | "md",
   useFilePicker: boolean
 ): Promise<"saved" | "canceled" | "downloaded"> {
   if (useFilePicker && supportsFilePicker()) {

@@ -52,7 +52,7 @@ async def get_findings(
 @router.get("/export/file")
 async def export_findings(
     scan_id: str,
-    format: str = Query(..., pattern="^(json|csv|pdf)$"),
+    format: str = Query(..., pattern="^(json|csv|pdf|md)$"),
     db: AsyncSession = Depends(get_db),
 ):
     scan = await db.get(Scan, scan_id)
@@ -74,6 +74,8 @@ async def export_findings(
         return _export_json(rows, scan.target_url)
     if format == "csv":
         return _export_csv(rows)
+    if format == "md":
+        return _export_md(rows, scan.target_url)
     return _export_pdf(rows, scan.target_url)
 
 
@@ -117,7 +119,7 @@ def _export_json(rows: list[dict], target_url: str) -> StreamingResponse:
     return StreamingResponse(
         iter([payload]),
         media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="findings.json"'},
+        headers={"Content-Disposition": 'attachment; filename="wvs_report.json"'},
     )
 
 
@@ -129,7 +131,50 @@ def _export_csv(rows: list[dict]) -> StreamingResponse:
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="findings.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="wvs_report.csv"'},
+    )
+
+
+def _export_md(rows: list[dict], target_url: str) -> StreamingResponse:
+    sorted_rows = sorted(rows, key=lambda r: SEVERITY_ORDER.get(r["severity"], 99))
+    counts = Counter(r["severity"] for r in rows)
+    summary = "  |  ".join(f"**{sev}**: {counts.get(sev, 0)}" for sev in SEVERITY_ORDER)
+
+    lines: list[str] = [
+        "# WVS Security Report",
+        "",
+        f"**Target:** {target_url}",
+        f"**Total findings:** {len(rows)}",
+        "",
+        summary,
+        "",
+        "---",
+        "",
+    ]
+
+    for i, row in enumerate(sorted_rows, 1):
+        lines.append(f"## {i}. [{row['severity']}] {row['title']}")
+        lines.append("")
+        lines.append(
+            f"**{row['owasp_category']} \u2014 {row['owasp_name']}** "
+            f"| Confidence: {row['confidence']} | URL: {row['url']}"
+        )
+        lines.append("")
+        lines.append(row["description"])
+        if row["evidence"]:
+            lines.append("")
+            lines.append(f"> **Evidence:** {row['evidence']}")
+        lines.append("")
+        lines.append(f"**Remediation:** {row['remediation']}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    content = "\n".join(lines)
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="wvs_report.md"'},
     )
 
 
@@ -139,7 +184,7 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     pdf.add_page()
 
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, "VenomAI Security Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 12, "WVS Security Report", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 8, f"Target: {target_url}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.cell(0, 8, f"Total findings: {len(rows)}", new_x="LMARGIN", new_y="NEXT", align="C")
@@ -199,7 +244,7 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="findings.pdf"'},
+        headers={"Content-Disposition": 'attachment; filename="wvs_report.pdf"'},
     )
 
 

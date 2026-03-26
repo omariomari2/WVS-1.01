@@ -128,7 +128,7 @@ export async function getScan(scanId: string) {
 
 export async function exportFindings(
   scanId: string,
-  format: "json" | "csv" | "pdf"
+  format: "json" | "csv" | "pdf" | "md"
 ): Promise<{ blob: Blob; filename: string }> {
   const res = await fetch(
     `${BACKEND_URL}/scans/${scanId}/findings/export/file?format=${format}`
@@ -139,7 +139,7 @@ export async function exportFindings(
   }
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition");
-  const defaultName = `findings.${format}`;
+  const defaultName = `wvs_report.${format}`;
   const filename = cd
     ? cd.split("filename=")[1]?.replace(/"/g, "") || defaultName
     : defaultName;

@@ -35,6 +35,7 @@ export default function HomePage() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
+  const exportBtnRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!navRef.current) return;
@@ -165,6 +166,7 @@ export default function HomePage() {
         visible={buttonsVisible}
         onClick={handleExportLogs}
         disabled={loadingBtn === "third"}
+        buttonRef={exportBtnRef}
       />
       <ActionButton
         label={loadingBtn === "fourth" ? "Inspect Findings..." : "Inspect Findings"}
@@ -201,6 +203,7 @@ export default function HomePage() {
         onClose={() => setIsExportOpen(false)}
         onSelect={handleExportSelect}
         loading={exportingFormat}
+        anchorRef={exportBtnRef}
       />
       <ToastContainer />
     </>

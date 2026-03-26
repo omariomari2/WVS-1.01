@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, type RefObject } from "react";
 import { motion } from "motion/react";
 import useMeasure from "react-use-measure";
 
@@ -8,6 +8,7 @@ const exportFormats = [
   { id: "pdf", label: "PDF Report" },
   { id: "csv", label: "CSV" },
   { id: "json", label: "JSON" },
+  { id: "md", label: "Markdown" },
 ] as const;
 
 export type ExportFormat = (typeof exportFormats)[number]["id"];
@@ -17,6 +18,7 @@ interface ExportDropdownProps {
   onClose: () => void;
   onSelect: (format: ExportFormat) => void;
   loading?: string | null;
+  anchorRef?: RefObject<HTMLElement | null>;
 }
 
 const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -26,10 +28,38 @@ export default function ExportDropdown({
   onClose,
   onSelect,
   loading,
+  anchorRef,
 }: ExportDropdownProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [contentRef, contentBounds] = useMeasure();
+  const [anchorPos, setAnchorPos] = useState<{ top: number; left: number } | null>(null);
+  const estimatedHeight = exportFormats.length * 32 + 40;
+
+  const updatePosition = useCallback(() => {
+    if (!anchorRef?.current) {
+      setAnchorPos(null);
+      return;
+    }
+    const rect = anchorRef.current.getBoundingClientRect();
+    const dropdownWidth = 180;
+    let left = rect.left + rect.width / 2 - dropdownWidth / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - dropdownWidth - 8));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow > estimatedHeight + 8 ? rect.bottom + 8 : rect.top - estimatedHeight - 8;
+    setAnchorPos({ top, left });
+  }, [anchorRef, estimatedHeight]);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,14 +86,17 @@ export default function ExportDropdown({
 
   const openHeight = Math.max(34, Math.ceil(contentBounds.height) + 16);
 
+  const positionStyle: React.CSSProperties = anchorPos
+    ? { position: "fixed", top: anchorPos.top, left: anchorPos.left, zIndex: 9999 }
+    : { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 9999 };
+
   return (
     <div
       ref={containerRef}
       className="anim-dropdown-container"
-      style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 9999 }}
+      style={positionStyle}
     >
       <motion.div
-        layout
         initial={false}
         animate={{
           width: open ? 180 : 0,
@@ -82,7 +115,6 @@ export default function ExportDropdown({
       >
         <div ref={contentRef} style={{ padding: "8px" }}>
           <motion.div
-            layout
             initial={false}
             animate={{ opacity: open ? 1 : 0 }}
             transition={{ duration: 0.2, delay: open ? 0.08 : 0 }}

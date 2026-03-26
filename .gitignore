@@ -46,6 +46,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Automation scripts
+scripts/
+
 # Project artifacts
 backend/*.db
 backend/*.sqlite*

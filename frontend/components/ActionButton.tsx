@@ -1,11 +1,14 @@
 "use client";
 
+import { type Ref } from "react";
+
 interface ActionButtonProps {
   label: string;
   variant: "first" | "sec" | "third" | "fourth" | "upload" | "scrape";
   visible?: boolean;
   onClick?: () => void;
   disabled?: boolean;
+  buttonRef?: Ref<HTMLDivElement>;
 }
 
 export default function ActionButton({
@@ -14,6 +17,7 @@ export default function ActionButton({
   visible,
   onClick,
   disabled,
+  buttonRef,
 }: ActionButtonProps) {
   const visibilityClass =
     variant === "upload" || variant === "scrape"
@@ -28,7 +32,7 @@ export default function ActionButton({
       : `button ${variant} ${visibilityClass}`.trim();
 
   return (
-    <div className={wrapperClass}>
+    <div ref={buttonRef} className={wrapperClass}>
       <button
         type="button"
         className="action-btn"
