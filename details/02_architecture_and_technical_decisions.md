@@ -76,10 +76,10 @@ What to say:
 
 Relevant code:
 
-- `frontend/src/app/page.tsx`
-- `frontend/src/components/scan-form.tsx`
-- `frontend/src/components/findings-dashboard.tsx`
-- `frontend/src/components/chat-panel.tsx`
+- `frontend/app/page.tsx`
+- `frontend/components/HomePage.tsx`
+- `frontend/components/InputSection.tsx`
+- `frontend/components/FindingsChatDrawer.tsx`
 
 Why this layer exists:
 
@@ -225,7 +225,7 @@ Relevant code:
 
 - `backend/app/websocket/scan_progress.py`
 - `backend/app/main.py`
-- `frontend/src/components/scan-progress.tsx`
+- `frontend/components/HomePage.tsx`
 
 Why WebSockets were chosen:
 
@@ -251,7 +251,7 @@ Relevant code:
 
 - `backend/app/routers/chat.py`
 - `backend/app/services/chat_service.py`
-- `frontend/src/lib/api.ts`
+- `frontend/lib/api.ts`
 
 Why chat is separate from scanning:
 

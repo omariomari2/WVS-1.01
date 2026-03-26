@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
+import ReactMarkdown from "react-markdown";
 
 type Message = {
   id: number;
@@ -15,6 +16,7 @@ interface FindingsChatDrawerProps {
   scrapeMode: boolean;
   scrapeUrl: string;
   hasUploadedHTML: boolean;
+  scanId: string | null;
 }
 
 export default function FindingsChatDrawer({
@@ -23,6 +25,7 @@ export default function FindingsChatDrawer({
   scrapeMode,
   scrapeUrl,
   hasUploadedHTML,
+  scanId,
 }: FindingsChatDrawerProps) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -139,29 +142,62 @@ export default function FindingsChatDrawer({
     };
   }, [open, onClose]);
 
-  function handleSend() {
+  async function handleSend() {
     const value = draft.trim();
     if (!value) return;
 
-    const userMessage: Message = {
-      id: Date.now(),
-      role: "user",
-      text: value,
-    };
-
-    const assistantMessage: Message = {
-      id: Date.now() + 1,
-      role: "assistant",
-      text:
-        scrapeMode && scrapeUrl.trim()
-          ? `WVS would inspect the scraped flow around "${value}" and return the clearest findings, risky states, and follow-up checks from this panel.`
-          : hasUploadedHTML
-            ? `WVS would analyze the uploaded frontend around "${value}" and break the review into structure, inputs, client logic, and visible risk signals.`
-            : `WVS can explore "${value}" once source content is available, then guide the review from this side console.`,
-    };
+    const userMessage: Message = { id: Date.now(), role: "user", text: value };
+    const assistantId = Date.now() + 1;
+    const assistantMessage: Message = { id: assistantId, role: "assistant", text: "..." };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft("");
+
+    if (!scanId) {
+      setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: "No active scan found to chat about." } : m));
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/scans/${scanId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: value }),
+      });
+
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let fullText = "";
+      let isFirstChunk = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            let data = line.slice(6);
+            if (data === "[DONE]") break;
+            
+            // Unescape newline if it was escaped by backend
+            data = data.replace(/\\n/g, '\n');
+            if (isFirstChunk) {
+              fullText = data;
+              isFirstChunk = false;
+            } else {
+              fullText += data;
+            }
+            
+            setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: fullText } : m));
+          }
+        }
+      }
+    } catch (err: any) {
+      setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: err.message || "Error connecting to AI analyst." } : m));
+    }
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -200,7 +236,9 @@ export default function FindingsChatDrawer({
                   <div className="chat-message-avatar">W</div>
                   <div className="chat-message-content">
                     <div className="chat-message-label">WVS</div>
-                    <div className="chat-message-bubble">{message.text}</div>
+                    <div className="chat-message-bubble chat-markdown">
+                      <ReactMarkdown>{message.text}</ReactMarkdown>
+                    </div>
                   </div>
                 </div>
               ) : (

@@ -63,7 +63,7 @@ What to say:
 
 Relevant code:
 
-- `frontend/src/components/scan-form.tsx`
+- `frontend/components/InputSection.tsx`
 - `backend/app/routers/scans.py`
 
 What it does:
@@ -162,7 +162,7 @@ Relevant code:
 
 What it does:
 
-- `cors_origins` defaults to `http://localhost:3000`
+- `cors_origins` defaults to `http://localhost:4500` and `http://127.0.0.1:4500`
 
 Why it matters:
 

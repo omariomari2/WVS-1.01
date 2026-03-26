@@ -1,6 +1,14 @@
+import csv
+import io
+import json
 from collections import Counter
+from pathlib import Path
+import uuid
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from fpdf import FPDF
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +17,29 @@ from app.models import Finding, Scan
 from app.schemas import FindingResponse, FindingsListResponse
 
 router = APIRouter(prefix="/api/scans/{scan_id}/findings", tags=["findings"])
+
+
+def _append_debug_log(
+    run_id: str,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict | None = None,
+) -> None:
+    payload = {
+        "sessionId": "c10438",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+        "id": f"dbg_{uuid.uuid4()}",
+    }
+    log_path = Path(__file__).resolve().parents[3] / "debug-c10438.log"
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False))
+        f.write("\n")
 
 
 @router.get("", response_model=FindingsListResponse)
@@ -45,6 +76,61 @@ async def get_findings(
     )
 
 
+@router.get("/export/file")
+async def export_findings(
+    scan_id: str,
+    format: str = Query(..., pattern="^(json|csv|pdf)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    #region agent log export_findings_enter
+    _append_debug_log(
+        run_id="initial",
+        hypothesis_id="H2_scan_not_found",
+        location="backend/app/routers/findings.py:export_findings_enter",
+        message="export_findings called",
+        data={"scan_id": scan_id, "format": format},
+    )
+    #endregion agent log export_findings_enter
+    scan = await db.get(Scan, scan_id)
+    #region agent log export_findings_scan_lookup
+    _append_debug_log(
+        run_id="initial",
+        hypothesis_id="H2_scan_not_found",
+        location="backend/app/routers/findings.py:export_findings_scan_lookup",
+        message="scan lookup result",
+        data={"found": bool(scan), "status": getattr(scan, "status", None)},
+    )
+    #endregion agent log export_findings_scan_lookup
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if scan.status != "completed":
+        #region agent log export_findings_scan_not_completed
+        _append_debug_log(
+            run_id="initial",
+            hypothesis_id="H3_scan_not_completed",
+            location="backend/app/routers/findings.py:export_findings_scan_not_completed",
+            message="scan status not completed",
+            data={"status": scan.status, "scan_id": scan_id},
+        )
+        #endregion agent log export_findings_scan_not_completed
+        raise HTTPException(
+            status_code=409,
+            detail="Scan must finish successfully before findings can be exported.",
+        )
+
+    result = await db.execute(
+        select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.created_at)
+    )
+    findings = result.scalars().all()
+    rows = [_finding_to_dict(f) for f in findings]
+
+    if format == "json":
+        return _export_json(rows, scan.target_url)
+    if format == "csv":
+        return _export_csv(rows)
+    return _export_pdf(rows, scan.target_url)
+
+
 @router.get("/{finding_id}", response_model=FindingResponse)
 async def get_finding(
     scan_id: str,
@@ -55,6 +141,130 @@ async def get_finding(
     if not finding or finding.scan_id != scan_id:
         raise HTTPException(status_code=404, detail="Finding not found")
     return _finding_to_response(finding)
+
+
+SEVERITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Informational": 4}
+
+_FIELDS = [
+    "severity", "owasp_category", "owasp_name", "title",
+    "description", "evidence", "url", "remediation", "confidence", "created_at",
+]
+
+
+def _finding_to_dict(f: Finding) -> dict:
+    return {
+        "severity": f.severity,
+        "owasp_category": f.owasp_category,
+        "owasp_name": f.owasp_name,
+        "title": f.title,
+        "description": f.description,
+        "evidence": f.evidence or "",
+        "url": f.url,
+        "remediation": f.remediation,
+        "confidence": f.confidence,
+        "created_at": f.created_at,
+    }
+
+
+def _export_json(rows: list[dict], target_url: str) -> StreamingResponse:
+    payload = json.dumps({"target_url": target_url, "findings": rows}, indent=2)
+    return StreamingResponse(
+        iter([payload]),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="findings.json"'},
+    )
+
+
+def _export_csv(rows: list[dict]) -> StreamingResponse:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_FIELDS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="findings.csv"'},
+    )
+
+
+def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, "VenomAI Security Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 8, f"Target: {target_url}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 8, f"Total findings: {len(rows)}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(6)
+
+    # Summary counts
+    from collections import Counter as _Ctr
+    counts = _Ctr(r["severity"] for r in rows)
+    summary_parts = [f"{sev}: {counts.get(sev, 0)}" for sev in SEVERITY_ORDER]
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 8, "  |  ".join(summary_parts), new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(6)
+
+    # Sort by severity
+    sorted_rows = sorted(rows, key=lambda r: SEVERITY_ORDER.get(r["severity"], 99))
+
+    sev_colors = {
+        "Critical": (220, 38, 38), "High": (234, 88, 12),
+        "Medium": (202, 138, 4), "Low": (22, 163, 74), "Informational": (59, 130, 246),
+    }
+
+    for i, row in enumerate(sorted_rows, 1):
+        # Check space remaining
+        if pdf.get_y() > 250:
+            pdf.add_page()
+
+        # Severity badge
+        r, g, b = sev_colors.get(row["severity"], (100, 100, 100))
+        pdf.set_fill_color(r, g, b)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(28, 7, f" {row['severity']}", fill=True)
+        pdf.set_text_color(0, 0, 0)
+
+        # Title
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 7, f"  {i}. {row['title']}", new_x="LMARGIN", new_y="NEXT")
+
+        # Meta line
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 5, f"{row['owasp_category']} - {row['owasp_name']}  |  Confidence: {row['confidence']}  |  URL: {row['url']}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+
+        # Description
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, row["description"])
+
+        # Evidence
+        if row["evidence"]:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(80, 80, 80)
+            pdf.multi_cell(0, 4, f"Evidence: {row['evidence']}")
+            pdf.set_text_color(0, 0, 0)
+
+        # Remediation
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 6, "Remediation:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, row["remediation"])
+        pdf.ln(4)
+
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="findings.pdf"'},
+    )
 
 
 def _finding_to_response(f: Finding) -> FindingResponse:
@@ -72,3 +282,4 @@ def _finding_to_response(f: Finding) -> FindingResponse:
         confidence=f.confidence,
         created_at=f.created_at,
     )
+

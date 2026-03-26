@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
     "websockets>=14.0",
+    "fpdf2>=2.8.0",
 ]
 
 [project.optional-dependencies]

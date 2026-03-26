@@ -16,6 +16,13 @@ const PICKER_TYPES: Record<
   zip: [
     { description: "ZIP Archive", accept: { "application/zip": [".zip"] } },
   ],
+  pdf: [
+    { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
+  ],
+  csv: [{ description: "CSV File", accept: { "text/csv": [".csv"] } }],
+  json: [
+    { description: "JSON File", accept: { "application/json": [".json"] } },
+  ],
 };
 
 export function supportsFilePicker(): boolean {
@@ -111,7 +118,7 @@ async function saveBlobWithPicker(
 export async function downloadBlob(
   blob: Blob,
   filename: string,
-  type: "html" | "zip",
+  type: "html" | "zip" | "pdf" | "csv" | "json",
   useFilePicker: boolean
 ): Promise<"saved" | "canceled" | "downloaded"> {
   if (useFilePicker && supportsFilePicker()) {

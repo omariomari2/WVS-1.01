@@ -53,7 +53,7 @@ Why this was difficult:
 Evidence in the code:
 
 - WebSocket progress manager in `backend/app/websocket/scan_progress.py`
-- frontend progress component in `frontend/src/components/scan-progress.tsx`
+- frontend scan status UI in `frontend/components/HomePage.tsx`
 - polling fallback if WebSockets fail
 
 Why this was a real engineering challenge:

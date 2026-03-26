@@ -18,6 +18,7 @@ export default function InputSection({
   onModeChange,
 }: InputSectionProps) {
   function handleScrapeClick() {
+    onScrapeReady();
   }
 
   return (
@@ -27,7 +28,7 @@ export default function InputSection({
           className={`mode-btn ${mode === "upload" ? "mode-btn-active" : ""}`}
           onClick={() => onModeChange("upload")}
         >
-          Upload HTML
+          Check Pr
         </button>
         <button
           className={`mode-btn ${mode === "scrape" ? "mode-btn-active" : ""}`}
