@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useLayoutEffect, useCallback, useRef } from "react";
+import type { Finding } from "@/lib/types";
 import gsap from "gsap";
 import GridBackground from "./GridBackground";
 import HeroTitle from "./HeroTitle";
@@ -34,6 +35,7 @@ export default function HomePage() {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+  const [chatAttachedFinding, setChatAttachedFinding] = useState<Finding | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const exportBtnRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +82,11 @@ export default function HomePage() {
 
   const handleExploreFindings = useCallback(() => {
     setIsChatOpen((prev) => !prev);
+  }, []);
+
+  const handleAskAI = useCallback((finding: Finding) => {
+    setChatAttachedFinding(finding);
+    setIsChatOpen(true);
   }, []);
 
   const handleExportLogs = useCallback(async () => {
@@ -189,6 +196,7 @@ export default function HomePage() {
         open={isLeftSidebarOpen}
         onClose={() => setIsLeftSidebarOpen(false)}
         scanId={scanId}
+        onAskAI={handleAskAI}
       />
       <FindingsChatDrawer
         open={isChatOpen}
@@ -197,6 +205,8 @@ export default function HomePage() {
         scrapeUrl={scrapeUrl}
         hasUploadedHTML={Boolean(uploadedHTML)}
         scanId={scanId}
+        attachedFinding={chatAttachedFinding}
+        onClearAttachedFinding={() => setChatAttachedFinding(null)}
       />
       <ExportDropdown
         open={isExportOpen}

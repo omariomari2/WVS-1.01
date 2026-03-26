@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import ReactMarkdown from "react-markdown";
+import type { Finding } from "@/lib/types";
 
 type Message = {
   id: number;
@@ -17,6 +18,8 @@ interface FindingsChatDrawerProps {
   scrapeUrl: string;
   hasUploadedHTML: boolean;
   scanId: string | null;
+  attachedFinding?: Finding | null;
+  onClearAttachedFinding?: () => void;
 }
 
 export default function FindingsChatDrawer({
@@ -26,12 +29,26 @@ export default function FindingsChatDrawer({
   scrapeUrl,
   hasUploadedHTML,
   scanId,
+  attachedFinding: externalFinding,
+  onClearAttachedFinding,
 }: FindingsChatDrawerProps) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [localFinding, setLocalFinding] = useState<Finding | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (externalFinding) {
+      setLocalFinding(externalFinding);
+      onClearAttachedFinding?.();
+    }
+  }, [externalFinding]);
+
+  useEffect(() => {
+    if (!open) setLocalFinding(null);
+  }, [open]);
 
   const starterMessage = useMemo(() => {
     if (scrapeMode && scrapeUrl.trim()) {
@@ -58,26 +75,15 @@ export default function FindingsChatDrawer({
       const timeline = gsap.timeline();
       timeline.to(
         backdrop,
-        {
-          autoAlpha: 1,
-          duration: 0.22,
-          ease: "power2.out",
-        },
+        { autoAlpha: 1, duration: 0.22, ease: "power2.out" },
         0
       );
       timeline.to(
         drawer,
-        {
-          x: 0,
-          autoAlpha: 1,
-          duration: 0.42,
-          ease: "power3.out",
-        },
+        { x: 0, autoAlpha: 1, duration: 0.42, ease: "power3.out" },
         0
       );
-      return () => {
-        timeline.kill();
-      };
+      return () => { timeline.kill(); };
     }
 
     const timeline = gsap.timeline({
@@ -88,38 +94,21 @@ export default function FindingsChatDrawer({
     });
     timeline.to(
       backdrop,
-      {
-        autoAlpha: 0,
-        duration: 0.18,
-        ease: "power2.in",
-      },
+      { autoAlpha: 0, duration: 0.18, ease: "power2.in" },
       0
     );
     timeline.to(
       drawer,
-      {
-        x: 56,
-        autoAlpha: 0,
-        duration: 0.28,
-        ease: "power2.in",
-      },
+      { x: 56, autoAlpha: 0, duration: 0.28, ease: "power2.in" },
       0
     );
 
-    return () => {
-      timeline.kill();
-    };
+    return () => { timeline.kill(); };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    setMessages([
-      {
-        id: 1,
-        role: "assistant",
-        text: starterMessage,
-      },
-    ]);
+    setMessages([{ id: 1, role: "assistant", text: starterMessage }]);
   }, [open, starterMessage]);
 
   useEffect(() => {
@@ -129,29 +118,37 @@ export default function FindingsChatDrawer({
 
   useEffect(() => {
     if (!open) return;
-
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
+      if (event.key === "Escape") onClose();
     }
-
     window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-    };
+    return () => window.removeEventListener("keydown", handleEscape);
   }, [open, onClose]);
 
-  async function handleSend() {
-    const value = draft.trim();
-    if (!value) return;
+  function buildMessageForBackend(userText: string, finding: Finding | null): string {
+    if (!finding) return userText;
+    const parts = [
+      `[Context: "${finding.title}" | ${finding.severity} | ${finding.owasp_category} - ${finding.owasp_name}]`,
+      finding.description,
+    ];
+    if (finding.evidence) parts.push(`Evidence: ${finding.evidence}`);
+    if (finding.url) parts.push(`URL: ${finding.url}`);
+    parts.push("---", userText);
+    return parts.join("\n");
+  }
 
-    const userMessage: Message = { id: Date.now(), role: "user", text: value };
+  async function handleSend() {
+    const userText = draft.trim();
+    if (!userText) return;
+
+    const backendMessage = buildMessageForBackend(userText, localFinding);
+    const userMessage: Message = { id: Date.now(), role: "user", text: userText };
     const assistantId = Date.now() + 1;
     const assistantMessage: Message = { id: assistantId, role: "assistant", text: "..." };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft("");
+    setLocalFinding(null);
 
     if (!scanId) {
       setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: "No active scan found to chat about." } : m));
@@ -162,7 +159,7 @@ export default function FindingsChatDrawer({
       const res = await fetch(`http://localhost:8000/api/scans/${scanId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: value }),
+        body: JSON.stringify({ message: backendMessage }),
       });
 
       if (!res.body) throw new Error("No response body");
@@ -174,23 +171,22 @@ export default function FindingsChatDrawer({
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split("\n\n");
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             let data = line.slice(6);
             if (data === "[DONE]") break;
-            
-            // Unescape newline if it was escaped by backend
-            data = data.replace(/\\n/g, '\n');
+
+            data = data.replace(/\\n/g, "\n");
             if (isFirstChunk) {
               fullText = data;
               isFirstChunk = false;
             } else {
               fullText += data;
             }
-            
+
             setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: fullText } : m));
           }
         }
@@ -253,12 +249,35 @@ export default function FindingsChatDrawer({
 
         <div className="chat-drawer-footer">
           <div className="chat-composer">
+            {localFinding && (
+              <div className="chat-context-card" data-severity={localFinding.severity}>
+                <span
+                  className="chat-context-dot"
+                  data-severity={localFinding.severity}
+                />
+                <span className="chat-context-title">
+                  {localFinding.title || localFinding.owasp_name}
+                </span>
+                <button
+                  type="button"
+                  className="chat-context-dismiss"
+                  onClick={() => setLocalFinding(null)}
+                  aria-label="Remove context"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
             <textarea
               className="chat-input"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask WVS about findings, inputs, scripts, flows, or risk signals"
+              placeholder={
+                localFinding
+                  ? "Ask something about this finding..."
+                  : "Ask WVS about findings, inputs, scripts, flows, or risk signals"
+              }
             />
             <div className="chat-composer-actions">
               <div className="chat-composer-note">
