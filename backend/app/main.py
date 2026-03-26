@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import chat, findings, scans
+from app.routers import chat, findings, pr, rectify, scans
 from app.websocket.scan_progress import progress_manager
 
 
@@ -33,6 +33,8 @@ app.add_middleware(
 app.include_router(scans.router)
 app.include_router(findings.router)
 app.include_router(chat.router)
+app.include_router(pr.router)
+app.include_router(rectify.router)
 
 
 @app.websocket("/ws/scans/{scan_id}")

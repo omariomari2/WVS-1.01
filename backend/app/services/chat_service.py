@@ -9,7 +9,7 @@ from app.config import settings
 from app.models import ChatMessage, Finding, Scan
 
 
-SYSTEM_PROMPT_TEMPLATE = """You are VenomAI, a cybersecurity expert assistant. You help users understand web security scan results in plain English.
+SYSTEM_PROMPT_URL = """You are VenomAI, a cybersecurity expert assistant. You help users understand web security scan results in plain English.
 
 A security scan was performed against: {target_url}
 
@@ -25,14 +25,31 @@ When the user asks about a finding or security topic:
 
 Be precise, actionable, and encouraging. Security can feel overwhelming - help the user understand what to prioritize and that these issues are fixable."""
 
+SYSTEM_PROMPT_PR = """You are VenomAI, a cybersecurity expert assistant specializing in PR security reviews. You help developers understand security findings in their pull requests and write secure code.
+
+PR: {pr_title} (#{pr_number})
+Repository: {repo_owner}/{repo_name}
+Branch: {pr_branch} -> {base_branch}
+URL: {pr_url}
+
+Here are the security findings from the SAST scan of this PR:
+{findings_json}
+
+When the user asks about a finding:
+1. Explain the vulnerability in the context of the specific file and code
+2. Explain the real-world attack scenario
+3. Provide a concrete code fix — show the before and after
+4. Reference the OWASP category and CWE where relevant
+5. Suggest how to test that the fix works
+
+You have access to file paths, line numbers, code snippets, and diff hunks for each finding. Use this context to give precise, file-specific advice."""
+
 
 async def build_chat_context(db: AsyncSession, scan_id: str) -> tuple[str, list[dict]]:
-    """Build system prompt with findings context and load chat history."""
     scan = await db.get(Scan, scan_id)
     if not scan:
         raise ValueError("Scan not found")
 
-    # Load findings
     result = await db.execute(
         select(Finding).where(Finding.scan_id == scan_id)
     )
@@ -40,7 +57,7 @@ async def build_chat_context(db: AsyncSession, scan_id: str) -> tuple[str, list[
 
     findings_data = []
     for f in findings:
-        findings_data.append({
+        entry: dict = {
             "id": f.id,
             "category": f"{f.owasp_category}: {f.owasp_name}",
             "severity": f.severity,
@@ -48,14 +65,38 @@ async def build_chat_context(db: AsyncSession, scan_id: str) -> tuple[str, list[
             "description": f.description,
             "remediation": f.remediation,
             "confidence": f.confidence,
-        })
+        }
+        if f.file_path:
+            entry["file_path"] = f.file_path
+        if f.line_number:
+            entry["line_number"] = f.line_number
+        if f.code_snippet:
+            entry["code_snippet"] = f.code_snippet
+        if f.diff_hunk:
+            entry["diff_hunk"] = f.diff_hunk[:500]
+        if f.cwe:
+            entry["cwe"] = f.cwe
+        if f.rule_id:
+            entry["rule_id"] = f.rule_id
+        findings_data.append(entry)
 
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
-        target_url=scan.target_url,
-        findings_json=json.dumps(findings_data, indent=2),
-    )
+    if scan.scan_type == "pr":
+        system_prompt = SYSTEM_PROMPT_PR.format(
+            pr_title=scan.pr_title or "Untitled",
+            pr_number=scan.pr_number or "?",
+            repo_owner=scan.repo_owner or "?",
+            repo_name=scan.repo_name or "?",
+            pr_branch=scan.pr_branch or "?",
+            base_branch=scan.base_branch or "?",
+            pr_url=scan.pr_url or scan.target_url,
+            findings_json=json.dumps(findings_data, indent=2),
+        )
+    else:
+        system_prompt = SYSTEM_PROMPT_URL.format(
+            target_url=scan.target_url,
+            findings_json=json.dumps(findings_data, indent=2),
+        )
 
-    # Load chat history
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.scan_id == scan_id)

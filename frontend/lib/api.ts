@@ -1,4 +1,4 @@
-import type { FindingsResponse } from "@/lib/types";
+import type { FindingsResponse, PrCommit, RectifyResponse, ScanResponse } from "@/lib/types";
 
 function getApiBase(): string {
   if (typeof window === "undefined") return "";
@@ -144,4 +144,103 @@ export async function exportFindings(
     ? cd.split("filename=")[1]?.replace(/"/g, "") || defaultName
     : defaultName;
   return { blob, filename };
+}
+
+export async function createPrScan(prUrl: string): Promise<ScanResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pr_url: prUrl }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to create PR scan");
+  }
+  return res.json();
+}
+
+export async function getPrScan(scanId: string): Promise<ScanResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}`);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to fetch PR scan");
+  }
+  return res.json();
+}
+
+export async function getPrCommits(scanId: string): Promise<PrCommit[]> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/commits`);
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to fetch commits");
+  }
+  return res.json();
+}
+
+export async function rectifySend(scanId: string, findingId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ finding_id: findingId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Rectify send failed");
+  }
+  return res.json();
+}
+
+export async function rectifyApply(scanId: string, findingId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/apply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ finding_id: findingId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Rectify apply failed");
+  }
+  return res.json();
+}
+
+export async function rectifyComment(scanId: string, findingId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/comment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ finding_id: findingId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Rectify comment failed");
+  }
+  return res.json();
+}
+
+export async function rectifyReview(scanId: string): Promise<RectifyResponse> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Rectify review failed");
+  }
+  return res.json();
+}
+
+export async function rectifyBatch(
+  scanId: string,
+  findingIds: string[],
+  action: "send" | "apply" | "comment"
+): Promise<RectifyResponse[]> {
+  const res = await fetch(`${BACKEND_URL}/pr-scans/${scanId}/rectify/batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ finding_ids: findingIds, action }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Rectify batch failed");
+  }
+  return res.json();
 }

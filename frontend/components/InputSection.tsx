@@ -6,6 +6,9 @@ interface InputSectionProps {
   onScrapeReady: () => void;
   scrapeUrl: string;
   onScrapeUrlChange: (url: string) => void;
+  onPrReady: () => void;
+  prUrl: string;
+  onPrUrlChange: (url: string) => void;
   mode: "upload" | "scrape";
   onModeChange: (mode: "upload" | "scrape") => void;
 }
@@ -14,13 +17,12 @@ export default function InputSection({
   onScrapeReady,
   scrapeUrl,
   onScrapeUrlChange,
+  onPrReady,
+  prUrl,
+  onPrUrlChange,
   mode,
   onModeChange,
 }: InputSectionProps) {
-  function handleScrapeClick() {
-    onScrapeReady();
-  }
-
   return (
     <div className="input-section">
       <div className="input-mode-toggle">
@@ -28,7 +30,7 @@ export default function InputSection({
           className={`mode-btn ${mode === "upload" ? "mode-btn-active" : ""}`}
           onClick={() => onModeChange("upload")}
         >
-          Check Pr
+          Check PR
         </button>
         <button
           className={`mode-btn ${mode === "scrape" ? "mode-btn-active" : ""}`}
@@ -37,6 +39,24 @@ export default function InputSection({
           Scrape URL
         </button>
       </div>
+      {mode === "upload" && (
+        <div className="scrape-input-area">
+          <input
+            id="pr-url-input"
+            type="url"
+            placeholder="https://github.com/owner/repo/pull/123"
+            autoComplete="off"
+            spellCheck={false}
+            value={prUrl}
+            onChange={(e) => onPrUrlChange(e.target.value)}
+          />
+          <ActionButton
+            label="Scan PR"
+            variant="scrape"
+            onClick={onPrReady}
+          />
+        </div>
+      )}
       {mode === "scrape" && (
         <div className="scrape-input-area">
           <input
@@ -51,7 +71,7 @@ export default function InputSection({
           <ActionButton
             label="Scrape"
             variant="scrape"
-            onClick={handleScrapeClick}
+            onClick={onScrapeReady}
           />
         </div>
       )}

@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import ThemeDropdown from "./ThemeDropdown";
-import { getFindings } from "@/lib/api";
+import { getFindings, rectifySend } from "@/lib/api";
 import type { Finding, FindingFilter } from "@/lib/types";
 
 interface LeftSidebarProps {
   open: boolean;
   onClose: () => void;
   scanId: string | null;
+  scanType?: "url" | "pr";
   onAskAI?: (finding: Finding) => void;
 }
 
@@ -21,12 +22,28 @@ function normalizeSeverity(
 
 function FindingAccordion({
   finding,
+  scanId,
+  scanType,
   onAskAI,
 }: {
   finding: Finding;
+  scanId?: string | null;
+  scanType?: "url" | "pr";
   onAskAI?: (finding: Finding) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [fixLoading, setFixLoading] = useState(false);
+
+  async function handleFix() {
+    if (!scanId) return;
+    setFixLoading(true);
+    try {
+      await rectifySend(scanId, finding.id);
+    } catch {
+    } finally {
+      setFixLoading(false);
+    }
+  }
 
   return (
     <article className="finding-accordion">
@@ -41,9 +58,25 @@ function FindingAccordion({
           className="finding-accordion-title"
           onClick={() => setExpanded((p) => !p)}
         >
-          {finding.title || finding.owasp_name}
+          <span>{finding.title || finding.owasp_name}</span>
+          {finding.file_path && (
+            <span className="finding-accordion-location">
+              {finding.file_path}{finding.line_number ? `:${finding.line_number}` : ""}
+            </span>
+          )}
         </button>
         <div className="finding-accordion-actions">
+          {scanType === "pr" && scanId && (
+            <button
+              type="button"
+              className="finding-ai-btn"
+              title="Send fix prompt to Cursor"
+              disabled={fixLoading}
+              onClick={handleFix}
+            >
+              {fixLoading ? "..." : "Fix"}
+            </button>
+          )}
           {onAskAI && (
             <button
               type="button"
@@ -51,48 +84,25 @@ function FindingAccordion({
               title="Ask AI about this finding"
               onClick={() => onAskAI(finding)}
             >
-              AI
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
+              </svg>
             </button>
           )}
-          <button
-            type="button"
-            className="finding-toggle-btn"
-            onClick={() => setExpanded((p) => !p)}
-            aria-expanded={expanded}
-            title={expanded ? "Collapse" : "Expand"}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              style={{
-                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.2s ease",
-              }}
-            >
-              <path
-                d="M3.5 5.25L7 8.75L10.5 5.25"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
         </div>
       </div>
-      {expanded && (
+      <div className={`finding-accordion-wrap${expanded ? " finding-accordion-wrap--open" : ""}`}>
         <div className="finding-accordion-body">
           <p className="finding-accordion-meta">
             {finding.owasp_category} &mdash; {finding.owasp_name} &nbsp;|&nbsp;
             Confidence: {finding.confidence}
+            {finding.commit_sha && (
+              <> &nbsp;|&nbsp; Commit: {finding.commit_sha.slice(0, 7)}</>
+            )}
           </p>
           <p className="finding-accordion-desc">{finding.description}</p>
-          {finding.evidence && (
-            <p className="finding-accordion-evidence">
-              <strong>Evidence:</strong> {finding.evidence}
-            </p>
+          {finding.code_snippet && (
+            <pre className="finding-accordion-code"><code>{finding.code_snippet}</code></pre>
           )}
           {finding.url && (
             <p className="finding-accordion-url">{finding.url}</p>
@@ -101,7 +111,7 @@ function FindingAccordion({
             <strong>Remediation:</strong> {finding.remediation}
           </p>
         </div>
-      )}
+      </div>
     </article>
   );
 }
@@ -110,6 +120,7 @@ export default function LeftSidebar({
   open,
   onClose,
   scanId,
+  scanType = "url",
   onAskAI,
 }: LeftSidebarProps) {
   const [filter, setFilter] = useState<FindingFilter>("all");
@@ -242,6 +253,8 @@ export default function LeftSidebar({
                 <FindingAccordion
                   key={finding.id}
                   finding={finding}
+                  scanId={scanId}
+                  scanType={scanType}
                   onAskAI={onAskAI}
                 />
               ))}

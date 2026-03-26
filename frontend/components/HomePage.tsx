@@ -10,6 +10,7 @@ import InputSection from "./InputSection";
 import DecorativeSvgs from "./DecorativeSvgs";
 import FindingsChatDrawer from "./FindingsChatDrawer";
 import LeftSidebar from "./LeftSidebar";
+import RectifyDrawer from "./RectifyDrawer";
 import ExportDropdown, { type ExportFormat } from "./ExportDropdown";
 import ToastContainer, { showToast } from "./Toast";
 import {
@@ -18,7 +19,9 @@ import {
   exportEJSProject,
   scrapeAndExport,
   createScan,
+  createPrScan,
   getScan,
+  getPrScan,
   exportFindings,
 } from "@/lib/api";
 import { downloadBlob, DOWNLOAD_DEFAULTS } from "@/lib/download";
@@ -26,13 +29,16 @@ import { downloadBlob, DOWNLOAD_DEFAULTS } from "@/lib/download";
 export default function HomePage() {
   const [uploadedHTML, setUploadedHTML] = useState("");
   const [scrapeUrl, setScrapeUrl] = useState("");
+  const [prUrl, setPrUrl] = useState("");
   const [scanId, setScanId] = useState<string | null>(null);
+  const [scanType, setScanType] = useState<"url" | "pr">("url");
   const [inputMode, setInputMode] = useState<"upload" | "scrape">("upload");
   const [scrapeMode, setScrapeMode] = useState(false);
   const [buttonsVisible, setButtonsVisible] = useState(false);
   const [loadingBtn, setLoadingBtn] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
+  const [isRectifyOpen, setIsRectifyOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<string | null>(null);
   const [chatAttachedFinding, setChatAttachedFinding] = useState<Finding | null>(null);
@@ -54,6 +60,23 @@ export default function HomePage() {
     return () => ctx.revert();
   }, []);
 
+  const handlePrReady = useCallback(async () => {
+    if (!prUrl) {
+      showToast("Please enter a PR URL first", "error");
+      return;
+    }
+    showToast("Importing PR findings...", "success");
+    try {
+      const scan = await createPrScan(prUrl);
+      setScanId(scan.id);
+      setScanType("pr");
+      setButtonsVisible(true);
+      showToast("PR scan started — choose an action above", "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to start PR scan", "error");
+    }
+  }, [prUrl]);
+
   const handleScrapeReady = useCallback(async () => {
     if (!scrapeUrl) {
       showToast("Please enter a URL first", "error");
@@ -63,6 +86,7 @@ export default function HomePage() {
     try {
       const scan = await createScan(scrapeUrl);
       setScanId(scan.id);
+      setScanType("url");
       setScrapeMode(true);
       setInputMode("scrape");
       setButtonsVisible(true);
@@ -77,8 +101,9 @@ export default function HomePage() {
     setButtonsVisible(false);
   }, []);
 
-  const handleClassifyFindings = useCallback(async () => {
-  }, [uploadedHTML]);
+  const handleRectify = useCallback(() => {
+    setIsRectifyOpen((prev) => !prev);
+  }, []);
 
   const handleExploreFindings = useCallback(() => {
     setIsChatOpen((prev) => !prev);
@@ -96,7 +121,7 @@ export default function HomePage() {
     }
     setLoadingBtn("third");
     try {
-      const scan = await getScan(scanId);
+      const scan = scanType === "pr" ? await getPrScan(scanId) : await getScan(scanId);
       if (scan.status === "failed") {
         showToast("The scan failed, so findings export is unavailable", "error");
         return;
@@ -111,7 +136,7 @@ export default function HomePage() {
     } finally {
       setLoadingBtn(null);
     }
-  }, [scanId]);
+  }, [scanId, scanType]);
 
   const handleExportSelect = useCallback(
     async (format: ExportFormat) => {
@@ -161,10 +186,10 @@ export default function HomePage() {
         disabled={loadingBtn === "first"}
       />
       <ActionButton
-        label={loadingBtn === "sec" ? "Classify Findings..." : "Classify Findings"}
+        label={loadingBtn === "sec" ? "Rectify..." : "Rectify"}
         variant="sec"
         visible={buttonsVisible}
-        onClick={handleClassifyFindings}
+        onClick={handleRectify}
         disabled={loadingBtn === "sec"}
       />
       <ActionButton
@@ -187,6 +212,9 @@ export default function HomePage() {
         onScrapeReady={handleScrapeReady}
         scrapeUrl={scrapeUrl}
         onScrapeUrlChange={setScrapeUrl}
+        onPrReady={handlePrReady}
+        prUrl={prUrl}
+        onPrUrlChange={setPrUrl}
         mode={inputMode}
         onModeChange={handleModeChange}
       />
@@ -196,7 +224,14 @@ export default function HomePage() {
         open={isLeftSidebarOpen}
         onClose={() => setIsLeftSidebarOpen(false)}
         scanId={scanId}
+        scanType={scanType}
         onAskAI={handleAskAI}
+      />
+      <RectifyDrawer
+        open={isRectifyOpen}
+        onClose={() => setIsRectifyOpen(false)}
+        scanId={scanId}
+        scanType={scanType}
       />
       <FindingsChatDrawer
         open={isChatOpen}

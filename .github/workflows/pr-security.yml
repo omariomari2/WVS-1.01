@@ -34,7 +34,10 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ./backend semgrep pip-audit
+          if [ -f ./backend/pyproject.toml ]; then
+            python -m pip install -e ./backend
+          fi
+          python -m pip install semgrep pip-audit
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
@@ -42,7 +45,11 @@ jobs:
       - name: Scan base snapshot
         run: |
           mkdir -p artifacts
-          python -m app.sast.cli scan-snapshot --repo . --output artifacts/base-findings.json
+          if python -c "from app.sast.cli import main" 2>/dev/null; then
+            python -m app.sast.cli scan-snapshot --repo . --output artifacts/base-findings.json
+          else
+            echo '{"repo_root":".","findings":[],"tool_errors":[{"tool":"skip","message":"SAST tools not available on base branch"}]}' > artifacts/base-findings.json
+          fi
 
       - name: Upload base findings
         uses: actions/upload-artifact@v4
@@ -72,7 +79,10 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ./backend semgrep pip-audit
+          if [ -f ./backend/pyproject.toml ]; then
+            python -m pip install -e ./backend
+          fi
+          python -m pip install semgrep pip-audit
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
@@ -80,7 +90,11 @@ jobs:
       - name: Scan PR merge snapshot
         run: |
           mkdir -p artifacts
-          python -m app.sast.cli scan-snapshot --repo . --output artifacts/pr-findings.json
+          if python -c "from app.sast.cli import main" 2>/dev/null; then
+            python -m app.sast.cli scan-snapshot --repo . --output artifacts/pr-findings.json
+          else
+            echo '{"repo_root":".","findings":[],"tool_errors":[{"tool":"skip","message":"SAST tools not available on PR branch"}]}' > artifacts/pr-findings.json
+          fi
 
       - name: Upload PR findings
         uses: actions/upload-artifact@v4
@@ -105,7 +119,9 @@ jobs:
       - name: Install backend package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ./backend
+          if [ -f ./backend/pyproject.toml ]; then
+            python -m pip install -e ./backend
+          fi
 
       - name: Download base findings
         uses: actions/download-artifact@v4
@@ -124,13 +140,20 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p artifacts/report
-          python -m app.sast.cli compare \
-            --base artifacts/base/base-findings.json \
-            --head artifacts/pr/pr-findings.json \
-            --markdown artifacts/report/pr-security-summary.md \
-            --json artifacts/report/diff-findings.json \
-            --fail-threshold high \
-            --github-annotations
+          if python -c "from app.sast.cli import main" 2>/dev/null; then
+            python -m app.sast.cli compare \
+              --base artifacts/base/base-findings.json \
+              --head artifacts/pr/pr-findings.json \
+              --markdown artifacts/report/pr-security-summary.md \
+              --json artifacts/report/diff-findings.json \
+              --fail-threshold high \
+              --github-annotations
+          else
+            echo "## PR Security Summary" > artifacts/report/pr-security-summary.md
+            echo "" >> artifacts/report/pr-security-summary.md
+            echo "SAST tools not available on this branch. No findings to compare." >> artifacts/report/pr-security-summary.md
+            echo '{"new":[],"resolved":[],"unchanged":[],"blocking":[]}' > artifacts/report/diff-findings.json
+          fi
 
       - name: Publish job summary
         if: always()

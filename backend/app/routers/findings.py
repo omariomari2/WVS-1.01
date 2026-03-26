@@ -262,4 +262,11 @@ def _finding_to_response(f: Finding) -> FindingResponse:
         remediation=f.remediation,
         confidence=f.confidence,
         created_at=f.created_at,
+        file_path=f.file_path,
+        line_number=f.line_number,
+        commit_sha=f.commit_sha,
+        code_snippet=f.code_snippet,
+        diff_hunk=f.diff_hunk,
+        rule_id=f.rule_id,
+        cwe=f.cwe,
     )
