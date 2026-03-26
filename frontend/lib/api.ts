@@ -130,44 +130,9 @@ export async function exportFindings(
   scanId: string,
   format: "json" | "csv" | "pdf"
 ): Promise<{ blob: Blob; filename: string }> {
-  const url = `${BACKEND_URL}/scans/${scanId}/findings/export/file?format=${format}`;
-  // #region agent log exportFindings_request
-  fetch(
-    "http://127.0.0.1:7816/ingest/88d9ee92-724e-48e5-a22e-75019e61e5a3",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c10438" },
-      body: JSON.stringify({
-        sessionId: "c10438",
-        runId: "initial",
-        hypothesisId: "H5_frontend_url",
-        location: "frontend/lib/api.ts:exportFindings_request",
-        message: "exportFindings request",
-        data: { scanId, format, url },
-        timestamp: Date.now(),
-      }),
-    }
-  ).catch(() => {});
-  // #endregion agent log exportFindings_request
-  const res = await fetch(url);
-  // #region agent log exportFindings_response
-  fetch(
-    "http://127.0.0.1:7816/ingest/88d9ee92-724e-48e5-a22e-75019e61e5a3",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "c10438" },
-      body: JSON.stringify({
-        sessionId: "c10438",
-        runId: "initial",
-        hypothesisId: "H5_frontend_url",
-        location: "frontend/lib/api.ts:exportFindings_response",
-        message: "exportFindings response status",
-        data: { scanId, format, url, status: res.status, ok: res.ok },
-        timestamp: Date.now(),
-      }),
-    }
-  ).catch(() => {});
-  // #endregion agent log exportFindings_response
+  const res = await fetch(
+    `${BACKEND_URL}/scans/${scanId}/findings/export/file?format=${format}`
+  );
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Export failed" }));
     throw new Error(err.detail || "Export failed");

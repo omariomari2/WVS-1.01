@@ -2,9 +2,6 @@ import csv
 import io
 import json
 from collections import Counter
-from pathlib import Path
-import uuid
-import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -17,29 +14,6 @@ from app.models import Finding, Scan
 from app.schemas import FindingResponse, FindingsListResponse
 
 router = APIRouter(prefix="/api/scans/{scan_id}/findings", tags=["findings"])
-
-
-def _append_debug_log(
-    run_id: str,
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict | None = None,
-) -> None:
-    payload = {
-        "sessionId": "c10438",
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(time.time() * 1000),
-        "id": f"dbg_{uuid.uuid4()}",
-    }
-    log_path = Path(__file__).resolve().parents[3] / "debug-c10438.log"
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=False))
-        f.write("\n")
 
 
 @router.get("", response_model=FindingsListResponse)
@@ -63,7 +37,6 @@ async def get_findings(
     result = await db.execute(query)
     findings = result.scalars().all()
 
-    # Build severity summary (always from all findings, not filtered)
     all_result = await db.execute(
         select(Finding).where(Finding.scan_id == scan_id)
     )
@@ -82,37 +55,10 @@ async def export_findings(
     format: str = Query(..., pattern="^(json|csv|pdf)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    #region agent log export_findings_enter
-    _append_debug_log(
-        run_id="initial",
-        hypothesis_id="H2_scan_not_found",
-        location="backend/app/routers/findings.py:export_findings_enter",
-        message="export_findings called",
-        data={"scan_id": scan_id, "format": format},
-    )
-    #endregion agent log export_findings_enter
     scan = await db.get(Scan, scan_id)
-    #region agent log export_findings_scan_lookup
-    _append_debug_log(
-        run_id="initial",
-        hypothesis_id="H2_scan_not_found",
-        location="backend/app/routers/findings.py:export_findings_scan_lookup",
-        message="scan lookup result",
-        data={"found": bool(scan), "status": getattr(scan, "status", None)},
-    )
-    #endregion agent log export_findings_scan_lookup
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     if scan.status != "completed":
-        #region agent log export_findings_scan_not_completed
-        _append_debug_log(
-            run_id="initial",
-            hypothesis_id="H3_scan_not_completed",
-            location="backend/app/routers/findings.py:export_findings_scan_not_completed",
-            message="scan status not completed",
-            data={"status": scan.status, "scan_id": scan_id},
-        )
-        #endregion agent log export_findings_scan_not_completed
         raise HTTPException(
             status_code=409,
             detail="Scan must finish successfully before findings can be exported.",
@@ -192,7 +138,6 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # Title
     pdf.set_font("Helvetica", "B", 18)
     pdf.cell(0, 12, "VenomAI Security Report", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 10)
@@ -200,7 +145,6 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     pdf.cell(0, 8, f"Total findings: {len(rows)}", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
-    # Summary counts
     from collections import Counter as _Ctr
     counts = _Ctr(r["severity"] for r in rows)
     summary_parts = [f"{sev}: {counts.get(sev, 0)}" for sev in SEVERITY_ORDER]
@@ -208,7 +152,6 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     pdf.cell(0, 8, "  |  ".join(summary_parts), new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
-    # Sort by severity
     sorted_rows = sorted(rows, key=lambda r: SEVERITY_ORDER.get(r["severity"], 99))
 
     sev_colors = {
@@ -217,11 +160,9 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
     }
 
     for i, row in enumerate(sorted_rows, 1):
-        # Check space remaining
         if pdf.get_y() > 250:
             pdf.add_page()
 
-        # Severity badge
         r, g, b = sev_colors.get(row["severity"], (100, 100, 100))
         pdf.set_fill_color(r, g, b)
         pdf.set_text_color(255, 255, 255)
@@ -229,32 +170,27 @@ def _export_pdf(rows: list[dict], target_url: str) -> StreamingResponse:
         pdf.cell(28, 7, f" {row['severity']}", fill=True)
         pdf.set_text_color(0, 0, 0)
 
-        # Title
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(0, 7, f"  {i}. {row['title']}", new_x="LMARGIN", new_y="NEXT")
 
-        # Meta line
         pdf.set_font("Helvetica", "", 8)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(0, 5, f"{row['owasp_category']} - {row['owasp_name']}  |  Confidence: {row['confidence']}  |  URL: {row['url']}", new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(0, 0, 0)
 
-        # Description
         pdf.set_font("Helvetica", "", 9)
-        pdf.multi_cell(0, 5, row["description"])
+        pdf.multi_cell(0, 5, row["description"], new_x="LMARGIN", new_y="NEXT")
 
-        # Evidence
         if row["evidence"]:
             pdf.set_font("Helvetica", "I", 8)
             pdf.set_text_color(80, 80, 80)
-            pdf.multi_cell(0, 4, f"Evidence: {row['evidence']}")
+            pdf.multi_cell(0, 4, f"Evidence: {row['evidence']}", new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(0, 0, 0)
 
-        # Remediation
         pdf.set_font("Helvetica", "B", 9)
         pdf.cell(0, 6, "Remediation:", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 9)
-        pdf.multi_cell(0, 5, row["remediation"])
+        pdf.multi_cell(0, 5, row["remediation"], new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
     buf = io.BytesIO()
@@ -282,4 +218,3 @@ def _finding_to_response(f: Finding) -> FindingResponse:
         confidence=f.confidence,
         created_at=f.created_at,
     )
-
