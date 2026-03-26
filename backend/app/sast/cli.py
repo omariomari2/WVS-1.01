@@ -6,10 +6,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
-from app.sast.base import ScanSnapshot
+from app.sast.base import ScanFinding, ScanSnapshot
 from app.sast.diff_engine import DiffResult, compare_findings
 from app.sast.normalize import (
     normalize_gitleaks,
@@ -149,6 +149,10 @@ def compare_snapshots(
 
 _PY_DEP_FILES = {"pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "Pipfile.lock"}
 _JS_DEP_FILES = {"package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"}
+_IGNORED_FINDING_PATH_GLOBS = (
+    "backend/semgrep_fixtures/**",
+    "backend/tests/sast/test_normalize.py",
+)
 
 
 def _collect_tool_findings(
@@ -193,7 +197,10 @@ def _collect_tool_findings(
 
     for tool_name, runner in tasks:
         try:
-            findings.extend(runner())
+            tool_findings = runner()
+            if tool_name in {"gitleaks", "semgrep"}:
+                tool_findings = _filter_ignored_findings(tool_findings)
+            findings.extend(tool_findings)
         except Exception as exc:
             tool_errors.append({"tool": tool_name, "message": str(exc)})
     return findings
@@ -281,7 +288,11 @@ def _run_semgrep(
 
     if changed_files:
         # Scan only the changed files that still exist on disk
-        existing = [str(repo_root / f) for f in changed_files if (repo_root / f).is_file()]
+        existing = [
+            str(repo_root / f)
+            for f in changed_files
+            if not _is_ignored_finding_path(f) and (repo_root / f).is_file()
+        ]
         if not existing:
             return {"results": []}
         cmd.extend(existing)
@@ -361,6 +372,16 @@ def _read_json(path: Path, default: Any) -> Any:
         return default
     content = path.read_text(encoding="utf-8").strip()
     return json.loads(content) if content else default
+
+
+def _filter_ignored_findings(findings: list[ScanFinding]) -> list[ScanFinding]:
+    return [finding for finding in findings if not _is_ignored_finding_path(finding.file_path)]
+
+
+def _is_ignored_finding_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("./")
+    pure_path = PurePosixPath(normalized)
+    return any(pure_path.match(pattern) for pattern in _IGNORED_FINDING_PATH_GLOBS)
 
 
 def _require_tool(name: str) -> None:
