@@ -167,11 +167,10 @@ def _collect_tool_findings(
 
     if changed_files is not None:
         changed_basenames = {Path(f).name for f in changed_files}
-        changed_dirs = {f.split("/")[0] for f in changed_files if "/" in f}
 
         # Only run dep audits if their manifest files changed
-        run_pip_audit = bool(changed_basenames & _PY_DEP_FILES) or "backend" in changed_dirs
-        run_npm_audit = bool(changed_basenames & _JS_DEP_FILES) or "frontend" in changed_dirs
+        run_pip_audit = bool(changed_basenames & _PY_DEP_FILES)
+        run_npm_audit = bool(changed_basenames & _JS_DEP_FILES)
 
     tasks: list[tuple[str, Any]] = [
         ("gitleaks", lambda: normalize_gitleaks(
