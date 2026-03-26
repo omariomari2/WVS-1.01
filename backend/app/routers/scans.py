@@ -30,12 +30,12 @@ async def create_scan(
 
     # Validate URL is reachable
     try:
-        async with httpx.AsyncClient(timeout=5, verify=False) as client:
+        async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
             resp = await client.head(target_url, follow_redirects=True)
     except httpx.RequestError as e:
         raise HTTPException(
             status_code=422,
-            detail=f"Cannot reach target URL: {e}",
+            detail="Cannot reach target URL. Check the URL and try again.",
         )
 
     scan = Scan(target_url=target_url)

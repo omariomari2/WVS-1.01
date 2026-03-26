@@ -20,8 +20,11 @@ async def create_pr_scan(
 ):
     try:
         owner, repo_name, pr_number = parse_pr_url(body.pr_url)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid GitHub pull request URL. Expected format: https://github.com/<owner>/<repo>/pull/<number>",
+        )
 
     repo_path = resolve_repo_path(repo_name)
 

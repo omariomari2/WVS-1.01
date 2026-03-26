@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from app.sast import cli
 from app.sast.base import ScanFinding
@@ -120,3 +121,40 @@ def test_changed_file_scan_filters_intentional_fixture_findings(
     )
 
     assert [finding.file_path for finding in findings] == ["backend/app/main.py"]
+
+
+def test_run_pip_audit_targets_backend_project_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    backend_dir = repo_root / "backend"
+    output_path = tmp_path / "pip-audit.json"
+    backend_dir.mkdir(parents=True)
+
+    commands: list[list[str]] = []
+
+    class _Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        commands.append(cmd)
+        output_path.write_text(json.dumps({"dependencies": []}), encoding="utf-8")
+        return _Result()
+
+    monkeypatch.setattr(cli, "_require_tool", lambda name: None)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    payload = cli._run_pip_audit(repo_root, output_path)
+
+    assert payload == {"dependencies": []}
+    assert commands == [[
+        "pip-audit",
+        "--format",
+        "json",
+        "--output",
+        str(output_path),
+        str(backend_dir),
+    ]]

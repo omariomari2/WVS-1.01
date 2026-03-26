@@ -12,5 +12,4 @@ def create_http_client() -> httpx.AsyncClient:
             "User-Agent": settings.scanner_user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
-        verify=False,  # We need to scan sites with invalid certs too
     )

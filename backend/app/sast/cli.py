@@ -322,22 +322,8 @@ def _run_semgrep(
 
 def _run_pip_audit(repo_root: Path, output_path: Path) -> dict[str, Any]:
     _require_tool("pip-audit")
-    python_executable = sys.executable
-
-    install_result = subprocess.run(
-        [python_executable, "-m", "pip", "install", "-e", str(repo_root / "backend")],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if install_result.returncode != 0:
-        raise RuntimeError(install_result.stderr.strip() or install_result.stdout.strip() or "backend install failed")
-
     audit_result = subprocess.run(
-        ["pip-audit", "--format", "json", "--output", str(output_path)],
+        ["pip-audit", "--format", "json", "--output", str(output_path), str(repo_root / "backend")],
         cwd=repo_root,
         capture_output=True,
         text=True,
