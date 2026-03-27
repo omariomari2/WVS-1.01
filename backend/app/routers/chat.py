@@ -1,3 +1,6 @@
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -9,6 +12,23 @@ from app.schemas import ChatMessageResponse, ChatRequest
 from app.services.chat_service import stream_chat_response
 
 router = APIRouter(prefix="/api/scans/{scan_id}/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
+
+
+def _format_sse(data: str, *, event: str | None = None) -> str:
+    lines = data.split("\n")
+    payload = []
+    if event:
+        payload.append(f"event: {event}")
+    payload.extend(f"data: {line}" for line in lines)
+    return "\n".join(payload) + "\n\n"
+
+
+def _format_chat_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    return "Chat request failed. Check the backend logs and ANTHROPIC_API_KEY."
 
 
 @router.post("")
@@ -24,10 +44,14 @@ async def chat(
         raise HTTPException(status_code=400, detail="Scan must be completed before chatting")
 
     async def event_stream():
-        async for chunk in stream_chat_response(db, scan_id, body.message):
-            # SSE format
-            yield f"data: {chunk}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for chunk in stream_chat_response(db, scan_id, body.message):
+                yield _format_sse(chunk)
+            yield _format_sse("[DONE]")
+        except Exception as exc:
+            logger.exception("Chat streaming failed for scan %s", scan_id)
+            payload = json.dumps({"message": _format_chat_error(exc)})
+            yield _format_sse(payload, event="error")
 
     return StreamingResponse(
         event_stream(),

@@ -11,6 +11,8 @@ interface InputSectionProps {
   onPrUrlChange: (url: string) => void;
   mode: "upload" | "scrape";
   onModeChange: (mode: "upload" | "scrape") => void;
+  hasActiveOperation: boolean;
+  onEndOperation: () => void;
 }
 
 export default function InputSection({
@@ -22,7 +24,23 @@ export default function InputSection({
   onPrUrlChange,
   mode,
   onModeChange,
+  hasActiveOperation,
+  onEndOperation,
 }: InputSectionProps) {
+  if (hasActiveOperation) {
+    return (
+      <div className="input-section">
+        <div className="scrape-input-area input-active-state">
+          <ActionButton
+            label="End Operation"
+            variant="upload"
+            onClick={onEndOperation}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="input-section">
       <div className="input-mode-toggle">

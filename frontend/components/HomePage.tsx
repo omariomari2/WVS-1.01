@@ -45,6 +45,7 @@ export default function HomePage() {
   const navRef = useRef<HTMLElement>(null);
   const rectifyBtnRef = useRef<HTMLDivElement>(null);
   const exportBtnRef = useRef<HTMLDivElement>(null);
+  const hasActiveOperation = Boolean(scanId);
 
   useLayoutEffect(() => {
     if (!navRef.current) return;
@@ -122,6 +123,25 @@ export default function HomePage() {
   const handleModeChange = useCallback((mode: "upload" | "scrape") => {
     setInputMode(mode);
     setButtonsVisible(false);
+  }, []);
+
+  const handleEndOperation = useCallback(() => {
+    setUploadedHTML("");
+    setScrapeUrl("");
+    setPrUrl("");
+    setScanId(null);
+    setScanType("url");
+    setInputMode("upload");
+    setScrapeMode(false);
+    setButtonsVisible(false);
+    setLoadingBtn(null);
+    setIsChatOpen(false);
+    setIsLeftSidebarOpen(false);
+    setIsRectifyOpen(false);
+    setIsExportOpen(false);
+    setExportingFormat(null);
+    setChatAttachedFinding(null);
+    showToast("Operation ended. Ready for a new scan.", "info");
   }, []);
 
   useEffect(() => {
@@ -232,14 +252,14 @@ export default function HomePage() {
       <ActionButton
         label={loadingBtn === "first" ? "Ask Agent..." : "Ask Agent"}
         variant="first"
-        visible={buttonsVisible}
+        visible={buttonsVisible || hasActiveOperation}
         onClick={handleExploreFindings}
         disabled={loadingBtn === "first"}
       />
       <ActionButton
         label={loadingBtn === "sec" ? "Rectify..." : "Rectify"}
         variant="sec"
-        visible={buttonsVisible && scanType === "pr"}
+        visible={(buttonsVisible || hasActiveOperation) && scanType === "pr"}
         onClick={handleRectify}
         disabled={loadingBtn === "sec"}
         buttonRef={rectifyBtnRef}
@@ -247,7 +267,7 @@ export default function HomePage() {
       <ActionButton
         label={loadingBtn === "third" ? "Export Logs..." : "Export Logs"}
         variant="third"
-        visible={buttonsVisible}
+        visible={buttonsVisible || hasActiveOperation}
         onClick={handleExportLogs}
         disabled={loadingBtn === "third"}
         buttonRef={exportBtnRef}
@@ -255,7 +275,7 @@ export default function HomePage() {
       <ActionButton
         label={loadingBtn === "fourth" ? "Inspect Findings..." : "Inspect Findings"}
         variant="fourth"
-        visible={buttonsVisible}
+        visible={buttonsVisible || hasActiveOperation}
         onClick={handleSummarize}
         disabled={loadingBtn === "fourth"}
       />
@@ -269,6 +289,8 @@ export default function HomePage() {
         onPrUrlChange={setPrUrl}
         mode={inputMode}
         onModeChange={handleModeChange}
+        hasActiveOperation={hasActiveOperation}
+        onEndOperation={handleEndOperation}
       />
 
       <DecorativeSvgs />
