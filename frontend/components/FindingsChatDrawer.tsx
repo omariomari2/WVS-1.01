@@ -1,8 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import type { Finding } from "@/lib/types";
 
 type Message = {
@@ -10,6 +12,155 @@ type Message = {
   role: "assistant" | "user";
   text: string;
 };
+
+type ParsedSseEvent = {
+  event: string;
+  data: string;
+};
+
+const markdownComponents: Components = {
+  p({ children }) {
+    return <p className="chat-markdown-paragraph">{children}</p>;
+  },
+  ul({ children }) {
+    return <ul className="chat-markdown-list chat-markdown-list-unordered">{children}</ul>;
+  },
+  ol({ children }) {
+    return <ol className="chat-markdown-list chat-markdown-list-ordered">{children}</ol>;
+  },
+  li({ children }) {
+    return <li className="chat-markdown-list-item">{children}</li>;
+  },
+  h1({ children }) {
+    return <h1 className="chat-markdown-heading chat-markdown-heading-1">{children}</h1>;
+  },
+  h2({ children }) {
+    return <h2 className="chat-markdown-heading chat-markdown-heading-2">{children}</h2>;
+  },
+  h3({ children }) {
+    return <h3 className="chat-markdown-heading chat-markdown-heading-3">{children}</h3>;
+  },
+  h4({ children }) {
+    return <h4 className="chat-markdown-heading chat-markdown-heading-4">{children}</h4>;
+  },
+  strong({ children }) {
+    return <strong className="chat-markdown-strong">{children}</strong>;
+  },
+  em({ children }) {
+    return <em className="chat-markdown-emphasis">{children}</em>;
+  },
+  blockquote({ children }) {
+    return <blockquote className="chat-markdown-quote">{children}</blockquote>;
+  },
+  hr() {
+    return <hr className="chat-markdown-divider" />;
+  },
+  pre({ children }) {
+    return <pre className="chat-markdown-pre">{children}</pre>;
+  },
+  code({ className, children, ...props }) {
+    return (
+      <code
+        className={className ? `chat-markdown-code ${className}` : "chat-markdown-code"}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  table({ children }) {
+    return (
+      <div className="chat-markdown-table-wrap">
+        <table className="chat-markdown-table">{children}</table>
+      </div>
+    );
+  },
+  thead({ children }) {
+    return <thead className="chat-markdown-thead">{children}</thead>;
+  },
+  tbody({ children }) {
+    return <tbody className="chat-markdown-tbody">{children}</tbody>;
+  },
+  tr({ children }) {
+    return <tr className="chat-markdown-row">{children}</tr>;
+  },
+  th({ children }) {
+    return <th className="chat-markdown-cell chat-markdown-cell-head">{children}</th>;
+  },
+  td({ children }) {
+    return <td className="chat-markdown-cell">{children}</td>;
+  },
+  a({ children, href, ...props }) {
+    return (
+      <a
+        className="chat-markdown-link"
+        href={href}
+        rel="noreferrer"
+        target="_blank"
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
+function normalizeAssistantMarkdown(text: string): string {
+  // Keep model formatting intact. Only normalize line endings and strip emojis.
+  const cleaned = text
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "")
+    .replace(/\u0000/g, "");
+
+  const hasStructuredMarkdown =
+    /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|\|)/m.test(cleaned);
+  const hasAnyNewline = cleaned.includes("\n");
+
+  if (hasStructuredMarkdown || hasAnyNewline || cleaned.length < 220) {
+    return cleaned;
+  }
+
+  // Fallback for dense plain-text replies: add light sentence breaks for readability.
+  return cleaned
+    .replace(/([.!?])\s+(?=[A-Za-z])/g, "$1\n")
+    .replace(/:\s+(?=[A-Za-z])/g, ":\n");
+}
+
+function parseSseEvent(block: string): ParsedSseEvent | null {
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim() || "message";
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.startsWith("data: ") ? line.slice(6) : line.slice(5));
+    }
+  }
+
+  if (dataLines.length === 0) return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+async function readChatError(response: Response): Promise<string> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const payload = await response.json().catch(() => null);
+    const detail =
+      payload?.detail || payload?.message || payload?.error || payload?.title;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail.trim();
+    }
+  }
+
+  const text = await response.text().catch(() => "");
+  if (text.trim()) return text.trim();
+
+  return `Chat request failed (${response.status} ${response.statusText}).`;
+}
 
 interface FindingsChatDrawerProps {
   open: boolean;
@@ -38,6 +189,7 @@ export default function FindingsChatDrawer({
   const backdropRef = useRef<HTMLDivElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const previousScanIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (externalFinding) {
@@ -107,9 +259,21 @@ export default function FindingsChatDrawer({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
-    setMessages([{ id: 1, role: "assistant", text: starterMessage }]);
-  }, [open, starterMessage]);
+    if (previousScanIdRef.current === scanId) return;
+
+    previousScanIdRef.current = scanId;
+
+    if (!scanId) {
+      setMessages([]);
+      setDraft("");
+      setLocalFinding(null);
+      return;
+    }
+
+    setMessages([{ id: Date.now(), role: "assistant", text: starterMessage }]);
+    setDraft("");
+    setLocalFinding(null);
+  }, [scanId, starterMessage]);
 
   useEffect(() => {
     if (!open || !bodyRef.current) return;
@@ -162,37 +326,82 @@ export default function FindingsChatDrawer({
         body: JSON.stringify({ message: backendMessage }),
       });
 
-      if (!res.body) throw new Error("No response body");
+      if (!res.ok) {
+        throw new Error(await readChatError(res));
+      }
+
+      if (!res.body) {
+        throw new Error("The chat service returned an empty response.");
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      let buffer = "";
       let fullText = "";
       let isFirstChunk = true;
+      let isDone = false;
 
-      while (true) {
+      while (!isDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            let data = line.slice(6);
-            if (data === "[DONE]") break;
+        let boundaryIndex = buffer.indexOf("\n\n");
+        while (boundaryIndex !== -1) {
+          const rawEvent = buffer.slice(0, boundaryIndex).replace(/\r/g, "");
+          buffer = buffer.slice(boundaryIndex + 2);
 
-            data = data.replace(/\\n/g, "\n");
-            if (isFirstChunk) {
-              fullText = data;
-              isFirstChunk = false;
-            } else {
-              fullText += data;
+          const parsedEvent = parseSseEvent(rawEvent);
+          if (parsedEvent) {
+            if (parsedEvent.event === "error") {
+              let message = parsedEvent.data;
+              try {
+                const payload = JSON.parse(parsedEvent.data);
+                if (typeof payload?.message === "string" && payload.message.trim()) {
+                  message = payload.message.trim();
+                }
+              } catch {
+                // Fall back to the raw SSE data when the payload is plain text.
+              }
+              throw new Error(message || "The AI analyst returned an error.");
             }
 
-            setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: fullText } : m));
+            if (parsedEvent.data === "[DONE]") {
+              isDone = true;
+              break;
+            }
+
+            if (isFirstChunk) {
+              fullText = parsedEvent.data;
+              isFirstChunk = false;
+            } else {
+              fullText += parsedEvent.data;
+            }
+
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? { ...message, text: fullText }
+                  : message
+              )
+            );
           }
+
+          boundaryIndex = buffer.indexOf("\n\n");
         }
+
+        if (done) break;
       }
     } catch (err: any) {
-      setMessages((prev) => prev.map(m => m.id === assistantId ? { ...m, text: err.message || "Error connecting to AI analyst." } : m));
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                text: err.message || "Error connecting to AI analyst.",
+              }
+            : message
+        )
+      );
     }
   }
 
@@ -233,7 +442,12 @@ export default function FindingsChatDrawer({
                   <div className="chat-message-content">
                     <div className="chat-message-label">WVS</div>
                     <div className="chat-message-bubble chat-markdown">
-                      <ReactMarkdown>{message.text}</ReactMarkdown>
+                      <ReactMarkdown
+                        components={markdownComponents}
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                      >
+                        {normalizeAssistantMarkdown(message.text)}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </div>
@@ -295,3 +509,4 @@ export default function FindingsChatDrawer({
     </>
   );
 }
+
