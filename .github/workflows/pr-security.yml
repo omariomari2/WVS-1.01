@@ -136,7 +136,7 @@ jobs:
             const dataTag = `<!-- venomai-findings:${encoded} -->`;
             const prUrl = context.payload.pull_request.html_url;
             const appLink = `http://localhost:4500?import_pr=${encodeURIComponent(prUrl)}`;
-            const linkLine = `\n\n---\n[:mag: **Open in VenomAI**](${appLink})\n`;
+            const linkLine = `\n\n---\n[Open in WVS](${appLink})\n`;
             const commentBody = `${marker}\n${dataTag}\n${body}${linkLine}`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
