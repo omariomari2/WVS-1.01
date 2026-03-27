@@ -2,6 +2,8 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+
 from app.models import Finding, Scan
 from app.services import rectify_service
 
@@ -223,3 +225,82 @@ def test_ai_comment_preserves_inline_targeting(monkeypatch) -> None:
     assert posted["body"] == "Generated AI review comment"
     assert posted["path"] == "backend/app/scanner/http_client.py"
     assert posted["line"] == 12
+
+
+def test_manual_comment_falls_back_when_inline_comment_is_forbidden(monkeypatch) -> None:
+    posted: dict[str, object] = {}
+
+    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+        request = httpx.Request("POST", "https://api.github.com/repos/example/repo/pulls/1/comments")
+        response = httpx.Response(
+            403,
+            request=request,
+            json={"message": "Resource not accessible by personal access token"},
+        )
+        raise httpx.HTTPStatusError(
+            "Client error '403 Forbidden' for url 'https://api.github.com/repos/example/repo/pulls/1/comments'",
+            request=request,
+            response=response,
+        )
+
+    async def fake_post_issue_comment(owner, repo, issue_number, body):
+        posted.update(
+            {
+                "owner": owner,
+                "repo": repo,
+                "issue_number": issue_number,
+                "body": body,
+            }
+        )
+        return {"ok": True}
+
+    monkeypatch.setattr("app.services.github_client.post_review_comment", fake_post_review_comment)
+    monkeypatch.setattr("app.services.github_client.post_issue_comment", fake_post_issue_comment)
+
+    result = asyncio.run(
+        rectify_service.pr_comment_manual(
+            None,
+            _build_scan(),
+            _build_finding(),
+            "Please restore TLS verification here.",
+        )
+    )
+
+    assert result["success"] is True
+    assert "general PR comment" in result["message"]
+    assert "Original location: `backend/app/scanner/http_client.py:12`" in str(posted["body"])
+
+
+def test_manual_comment_includes_permission_guidance_when_github_returns_403(monkeypatch) -> None:
+    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+        request = httpx.Request("POST", "https://api.github.com/repos/example/repo/pulls/1/comments")
+        response = httpx.Response(
+            403,
+            request=request,
+            json={"message": "Resource not accessible by personal access token"},
+        )
+        raise httpx.HTTPStatusError("403 Forbidden", request=request, response=response)
+
+    async def fake_post_issue_comment(owner, repo, issue_number, body):
+        request = httpx.Request("POST", "https://api.github.com/repos/example/repo/issues/1/comments")
+        response = httpx.Response(
+            403,
+            request=request,
+            json={"message": "Resource not accessible by personal access token"},
+        )
+        raise httpx.HTTPStatusError("403 Forbidden", request=request, response=response)
+
+    monkeypatch.setattr("app.services.github_client.post_review_comment", fake_post_review_comment)
+    monkeypatch.setattr("app.services.github_client.post_issue_comment", fake_post_issue_comment)
+
+    result = asyncio.run(
+        rectify_service.pr_comment_manual(
+            None,
+            _build_scan(),
+            _build_finding(),
+            "Please restore TLS verification here.",
+        )
+    )
+
+    assert result["success"] is False
+    assert "Pull requests (write)" in result["message"]

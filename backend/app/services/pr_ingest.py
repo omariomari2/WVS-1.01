@@ -33,7 +33,7 @@ async def run_pr_ingest(scan_id: str, pr_url: str):
             scan.target_url = pr_url
             await db.commit()
 
-            repo_path = local_repo.resolve_repo_path(repo_name)
+            repo_path = local_repo.resolve_repo_path(repo_name, owner)
             if repo_path:
                 scan.local_repo_path = str(repo_path)
                 await db.commit()
