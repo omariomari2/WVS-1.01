@@ -54,3 +54,4 @@ backend/*.db
 backend/*.sqlite*
 backend/*.egg-info/
 .venomai-launcher/
+details/
