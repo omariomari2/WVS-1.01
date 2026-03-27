@@ -55,3 +55,6 @@ backend/*.sqlite*
 backend/*.egg-info/
 .venomai-launcher/
 details/
+
+# Local vulnerable sandbox projects
+sandbox/vuln-sandbox-app/
