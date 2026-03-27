@@ -35,23 +35,10 @@ const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const popupActions: Array<{
   id: PopupAction;
   label: string;
-  description: string;
 }> = [
-  {
-    id: "claude",
-    label: "Send to Claude",
-    description: "Pick a vulnerability and launch Claude Code in a new terminal.",
-  },
-  {
-    id: "comment",
-    label: "Comment on PR",
-    description: "Post either an AI-generated or manual comment for a selected finding.",
-  },
-  {
-    id: "study",
-    label: "Study Type",
-    description: "Open an OWASP-focused search for a selected vulnerability.",
-  },
+  { id: "claude", label: "Send to Claude" },
+  { id: "comment", label: "Comment on PR" },
+  { id: "study", label: "Study Type" },
 ];
 
 export default function RectifyPopup({
@@ -464,7 +451,6 @@ export default function RectifyPopup({
                       }}
                     >
                       <span className="rectify-popup-option-label">{action.label}</span>
-                      <span className="rectify-popup-option-copy">{action.description}</span>
                     </button>
                   </motion.li>
                 ))}

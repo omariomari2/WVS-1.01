@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import anthropic
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -156,14 +157,58 @@ async def _post_pr_comment(
 ) -> dict:
     try:
         if finding.file_path and finding.line_number:
-            await github_client.post_review_comment(
-                scan.repo_owner,
-                scan.repo_name,
-                scan.pr_number,
-                comment_body,
-                finding.file_path,
-                finding.line_number,
-            )
+            try:
+                await github_client.post_review_comment(
+                    scan.repo_owner,
+                    scan.repo_name,
+                    scan.pr_number,
+                    comment_body,
+                    finding.file_path,
+                    finding.line_number,
+                )
+            except Exception as inline_exc:
+                if _should_fallback_to_issue_comment(inline_exc):
+                    fallback_body = _build_fallback_issue_body(
+                        comment_body,
+                        finding,
+                        issue_header=issue_header,
+                    )
+                    try:
+                        await github_client.post_issue_comment(
+                            scan.repo_owner,
+                            scan.repo_name,
+                            scan.pr_number,
+                            fallback_body,
+                        )
+                        return {
+                            "success": True,
+                            "action": action,
+                            "finding_id": finding.id,
+                            "content": comment_body,
+                            "message": (
+                                "Inline review comment could not be posted. "
+                                "Posted as a general PR comment instead."
+                            ),
+                        }
+                    except Exception as fallback_exc:
+                        return {
+                            "success": False,
+                            "action": action,
+                            "finding_id": finding.id,
+                            "content": comment_body,
+                            "message": (
+                                f"{failure_prefix}: inline review comment failed "
+                                f"({_github_error_message(inline_exc)}); fallback PR "
+                                f"comment also failed ({_github_error_message(fallback_exc)})."
+                            ),
+                        }
+                return {
+                    "success": False,
+                    "action": action,
+                    "finding_id": finding.id,
+                    "content": comment_body,
+                    "message": f"{failure_prefix}: {_github_error_message(inline_exc)}",
+                }
         else:
             issue_body = comment_body
             if issue_header:
@@ -187,12 +232,82 @@ async def _post_pr_comment(
             "action": action,
             "finding_id": finding.id,
             "content": comment_body,
-            "message": f"{failure_prefix}: {exc}",
+            "message": f"{failure_prefix}: {_github_error_message(exc)}",
         }
 
 
 def _issue_header(finding: Finding) -> str:
     return f"**{finding.severity}: {finding.title}**"
+
+
+def _should_fallback_to_issue_comment(exc: Exception) -> bool:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return False
+    return exc.response.status_code in {403, 422}
+
+
+def _build_fallback_issue_body(
+    comment_body: str,
+    finding: Finding,
+    *,
+    issue_header: str | None,
+) -> str:
+    location = finding.file_path or "unknown-file"
+    if finding.line_number:
+        location = f"{location}:{finding.line_number}"
+    header = f"{issue_header}\n\n" if issue_header else ""
+    return (
+        f"{header}{comment_body}\n\n"
+        f"_Inline target fallback. Original location: `{location}`._"
+    )
+
+
+def _github_error_message(exc: Exception) -> str:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return str(exc)
+
+    status = exc.response.status_code
+    message = ""
+    detail = ""
+    try:
+        payload = exc.response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        message = str(payload.get("message") or "").strip()
+        raw_errors = payload.get("errors")
+        if isinstance(raw_errors, list) and raw_errors:
+            parts: list[str] = []
+            for item in raw_errors[:3]:
+                if isinstance(item, dict):
+                    code = str(item.get("code") or "").strip()
+                    item_message = str(item.get("message") or "").strip()
+                    if code and item_message:
+                        parts.append(f"{code}: {item_message}")
+                    elif code or item_message:
+                        parts.append(code or item_message)
+                else:
+                    parts.append(str(item))
+            if parts:
+                detail = "; ".join(parts)
+
+    bits = [f"GitHub API {status}"]
+    if message:
+        bits.append(message)
+    if detail:
+        bits.append(detail)
+    if status == 403:
+        bits.append(
+            "Check GITHUB_TOKEN repository access and scopes. "
+            "Inline comments require Pull requests (write); PR comments require Issues (write)."
+        )
+    elif status == 422:
+        bits.append(
+            "GitHub rejected the inline location. "
+            "Verify the file path and line exist on the current PR diff."
+        )
+    return " - ".join(bits)
 
 
 def _build_comment_context(finding: Finding) -> str:

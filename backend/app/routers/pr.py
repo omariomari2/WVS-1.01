@@ -26,7 +26,7 @@ async def create_pr_scan(
             detail="Invalid GitHub pull request URL. Expected format: https://github.com/<owner>/<repo>/pull/<number>",
         )
 
-    repo_path = resolve_repo_path(repo_name)
+    repo_path = resolve_repo_path(repo_name, owner)
 
     scan = Scan(
         target_url=body.pr_url,
