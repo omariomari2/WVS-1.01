@@ -460,6 +460,8 @@ nav {
   border-radius: 22px;
   will-change: transform, opacity;
   font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
   overflow-x: hidden;
 }
 
@@ -537,7 +539,7 @@ nav {
   align-items: flex-start;
   gap: 0.65rem;
   min-width: 0;
-  overflow: hidden;
+  width: 100%;
 }
 
 .chat-message-content {
@@ -545,7 +547,7 @@ nav {
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .chat-message-user {
@@ -565,7 +567,7 @@ nav {
 }
 
 .chat-message-label {
-  font-size: 0.63rem;
+  font-size: 0.72rem;
   color: var(--textDim);
 }
 
@@ -573,14 +575,18 @@ nav {
   max-width: 88%;
   padding: 0.68rem 0.82rem;
   border-radius: 14px;
-  line-height: 1.5;
-  font-size: 0.82rem;
+  line-height: 1.6;
+  font-size: 1rem;
   color: var(--text);
   background: var(--primaryBg);
   border: 1px solid var(--primaryHi);
-  overflow: hidden;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   word-break: break-word;
+  max-inline-size: 100%;
+}
+
+.chat-message-user .chat-message-row {
+  justify-content: flex-end;
 }
 
 .chat-message-user .chat-message-bubble {
@@ -595,11 +601,12 @@ nav {
 /* Chat Markdown Formatting */
 .chat-markdown {
   word-wrap: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   word-break: break-word;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  max-width: 100%;
 }
 
 .chat-markdown p, .chat-markdown ul, .chat-markdown ol, .chat-markdown pre {
@@ -619,7 +626,7 @@ nav {
   padding: 0.15rem 0.35rem;
   border-radius: 4px;
   font-family: monospace;
-  font-size: 0.9em;
+  font-size: 0.92em;
 }
 
 .chat-markdown pre {
@@ -627,6 +634,7 @@ nav {
   padding: 0.6rem;
   border-radius: 8px;
   overflow-x: auto;
+  max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -646,10 +654,10 @@ nav {
   line-height: 1.35;
 }
 
-.chat-markdown h1 { font-size: 0.92rem; }
-.chat-markdown h2 { font-size: 0.88rem; }
-.chat-markdown h3 { font-size: 0.84rem; }
-.chat-markdown h4 { font-size: 0.82rem; }
+.chat-markdown h1 { font-size: 1.15rem; }
+.chat-markdown h2 { font-size: 1.05rem; }
+.chat-markdown h3 { font-size: 1rem; }
+.chat-markdown h4 { font-size: 0.95rem; }
 
 .chat-markdown strong {
   color: var(--text);
@@ -665,7 +673,7 @@ nav {
   padding: 0.35rem 0.6rem;
   border-left: 2px solid var(--primaryHi);
   color: var(--textDim);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
 }
 
 .chat-markdown hr {
@@ -676,8 +684,11 @@ nav {
 
 .chat-markdown table {
   width: 100%;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.92rem;
 }
 
 .chat-markdown th,
@@ -729,7 +740,8 @@ nav {
   color: var(--text);
   padding: 0.72rem 0.85rem 0.55rem;
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 1rem;
+  line-height: 1.5;
   outline: none;
 }
 
@@ -746,7 +758,7 @@ nav {
 }
 
 .chat-composer-note {
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   color: var(--textDim);
   line-height: 1.4;
 }
@@ -762,7 +774,7 @@ nav {
   color: var(--primaryFg);
   font-family: inherit;
   font-weight: 700;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 

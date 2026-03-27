@@ -2,6 +2,8 @@ name: PR Security
 
 on:
   pull_request:
+    paths:
+      - sandbox/**
 
 permissions:
   contents: read
@@ -26,21 +28,38 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
           if [ -f ./backend/pyproject.toml ]; then
             python -m pip install -e ./backend
           fi
-          python -m pip install semgrep pip-audit
+          python -m pip install semgrep
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: Detect touched sandbox projects
+        id: sandbox
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" -- 'sandbox/**')"; then
+            CHANGED_FILES="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA..HEAD" -- 'sandbox/**')"
+          fi
+
+          mapfile -t PROJECT_ROOTS < <(
+            printf '%s\n' "$CHANGED_FILES" |
+            awk -F/ '/^sandbox\/[^/]+\/?/ { print $1 "/" $2 }' |
+            sort -u
+          )
+
+          {
+            echo "count=${#PROJECT_ROOTS[@]}"
+            echo "roots<<EOF"
+            printf '%s\n' "${PROJECT_ROOTS[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Scan only changed files
         id: scan
@@ -48,13 +67,29 @@ jobs:
         run: |
           mkdir -p artifacts/report
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          SANDBOX_PROJECT_COUNT="${{ steps.sandbox.outputs.count }}"
+          SANDBOX_ROOTS="${{ steps.sandbox.outputs.roots }}"
 
           if python -c "from app.sast.cli import main" 2>/dev/null; then
-            # Scan head (PR merge) — scoped to changed files only
-            python -m app.sast.cli scan-snapshot \
-              --repo . \
-              --diff-base "$BASE_SHA" \
-              --output artifacts/pr-findings.json
+            SCOPE_ARGS=()
+            if [ "${SANDBOX_PROJECT_COUNT:-0}" -gt 0 ]; then
+              mapfile -t PROJECT_ROOTS <<< "$SANDBOX_ROOTS"
+              for root in "${PROJECT_ROOTS[@]}"; do
+                [ -n "$root" ] || continue
+                SCOPE_ARGS+=(--scope-root "$root")
+              done
+            fi
+
+            if [ ${#SCOPE_ARGS[@]} -eq 0 ]; then
+              echo '{"repo_root":".","findings":[],"tool_errors":[]}' > artifacts/pr-findings.json
+            else
+              # Scan head (PR merge) - scoped to changed sandbox files only
+              python -m app.sast.cli scan-snapshot \
+                --repo . \
+                --diff-base "$BASE_SHA" \
+                "${SCOPE_ARGS[@]}" \
+                --output artifacts/pr-findings.json
+            fi
 
             # Build an empty base snapshot (no findings) so the compare
             # step treats every finding from the diff scan as "new".

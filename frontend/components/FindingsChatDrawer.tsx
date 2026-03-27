@@ -238,9 +238,11 @@ export default function FindingsChatDrawer({
                   </div>
                 </div>
               ) : (
-                <div className="chat-message-content">
-                  <div className="chat-message-label">You</div>
-                  <div className="chat-message-bubble">{message.text}</div>
+                <div className="chat-message-row">
+                  <div className="chat-message-content">
+                    <div className="chat-message-label">You</div>
+                    <div className="chat-message-bubble">{message.text}</div>
+                  </div>
                 </div>
               )}
             </div>

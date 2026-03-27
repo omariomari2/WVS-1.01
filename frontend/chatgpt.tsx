@@ -32,7 +32,7 @@ import { PlusIcon } from "lucide-react";
 export const ChatGPT: FC = () => {
   return (
     <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-background px-4 text-foreground dark:bg-[#212121] dark:text-foreground">
-      <ThreadPrimitive.Viewport className="flex grow flex-col gap-8 overflow-y-scroll pt-16">
+      <ThreadPrimitive.Viewport className="flex grow flex-col gap-8 overflow-y-auto pt-16">
         <AuiIf condition={(s) => s.thread.isEmpty}>
           <div className="flex grow flex-col items-center justify-center">
             <Avatar.Root className="flex h-12 w-12 items-center justify-center rounded-3xl border shadow dark:border-white/15">
@@ -68,7 +68,7 @@ export const ChatGPT: FC = () => {
               </ComposerPrimitive.AddAttachment>
               <ComposerPrimitive.Input
                 placeholder="Ask anything"
-                className="h-12 max-h-40 grow resize-none bg-transparent p-3.5 text-foreground text-sm outline-none placeholder:text-muted-foreground dark:text-white dark:placeholder:text-white/50"
+                className="h-12 max-h-40 grow resize-none bg-transparent p-3.5 text-foreground text-sm leading-6 outline-none placeholder:text-muted-foreground dark:text-white dark:placeholder:text-white/50"
               />
               <AuiIf condition={(s) => !s.thread.isRunning}>
                 <ComposerPrimitive.Send className="m-2 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-10 dark:bg-white dark:text-black">
@@ -114,7 +114,7 @@ const UserMessage: FC = () => {
         />
       </div>
 
-      <div className="flex items-start gap-4">
+      <div className="flex min-w-0 items-start gap-4">
         <ActionBarPrimitive.Root
           hideWhenRunning
           autohide="not-last"
@@ -128,7 +128,7 @@ const UserMessage: FC = () => {
           </ActionBarPrimitive.Edit>
         </ActionBarPrimitive.Root>
 
-        <div className="rounded-3xl bg-secondary px-5 py-2 text-foreground dark:bg-white/5 dark:text-[#eee]">
+        <div className="min-w-0 max-w-full rounded-3xl bg-secondary px-5 py-2 text-sm leading-6 text-foreground break-words dark:bg-white/5 dark:text-[#eee]">
           <MessagePrimitive.Parts />
         </div>
       </div>
@@ -141,7 +141,7 @@ const UserMessage: FC = () => {
 const EditComposer: FC = () => {
   return (
     <ComposerPrimitive.Root className="mx-auto flex w-full max-w-3xl flex-col justify-end gap-1 rounded-3xl bg-secondary dark:bg-white/15">
-      <ComposerPrimitive.Input className="flex h-8 w-full resize-none bg-transparent p-5 pb-0 text-foreground outline-none dark:text-white" />
+      <ComposerPrimitive.Input className="flex h-8 w-full resize-none bg-transparent p-5 pb-0 text-sm leading-6 text-foreground outline-none dark:text-white" />
 
       <div className="m-3 mt-2 flex items-center justify-center gap-2 self-end">
         <ComposerPrimitive.Cancel className="rounded-full bg-background px-3 py-2 font-semibold text-foreground text-sm hover:bg-muted dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800">
@@ -164,8 +164,8 @@ const AssistantMessage: FC = () => {
         </Avatar.AvatarFallback>
       </Avatar.Root>
 
-      <div className="pt-1">
-        <div className="text-foreground dark:text-[#eee]">
+      <div className="min-w-0 pt-1">
+        <div className="max-w-full text-sm leading-6 text-foreground break-words dark:text-[#eee]">
           <MessagePrimitive.Parts />
         </div>
 
