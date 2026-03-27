@@ -1,0 +1,248 @@
+rules:
+  - id: venomai.hardcoded-secrets.python.assignment
+    languages: [python]
+    message: Suspicious hardcoded secret assigned in Python code.
+    severity: ERROR
+    paths:
+      exclude:
+        - .env.example
+        - "**/*test*.py"
+    patterns:
+      - pattern-regex: (?i)\b(api[_-]?key|secret|token|password|passwd|pwd|access[_-]?key|private[_-]?key)\b\s*=\s*["'][^"'\n]{8,}["']
+      - pattern-not-regex: (?i)(example|placeholder|changeme|your[-_ ]?key|test[_-]?key)
+
+  - id: venomai.hardcoded-secrets.javascript.assignment
+    languages: [javascript, typescript]
+    message: Suspicious hardcoded secret assigned in JavaScript or TypeScript code.
+    severity: ERROR
+    paths:
+      exclude:
+        - .env.example
+        - "**/*test*.ts"
+        - "**/*test*.tsx"
+        - "**/*test*.js"
+        - "**/*test*.jsx"
+    patterns:
+      - pattern-regex: (?i)\b(api[_-]?key|secret|token|password|passwd|pwd|access[_-]?key|private[_-]?key)\b\s*[:=]\s*["'][^"'\n]{8,}["']
+      - pattern-not-regex: (?i)(example|placeholder|changeme|your[-_ ]?key|test[_-]?key)
+
+  - id: venomai.unsafe-input.python.dangerous-sink
+    languages: [python]
+    message: Request input appears to flow directly into a dangerous sink.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: eval($REQ.$FIELD[$KEY])
+          - pattern: exec($REQ.$FIELD[$KEY])
+          - pattern: open($REQ.$FIELD[$KEY], ...)
+          - pattern: subprocess.run($REQ.$FIELD[$KEY], ...)
+          - pattern: httpx.get($REQ.$FIELD[$KEY], ...)
+          - pattern: httpx.post($REQ.$FIELD[$KEY], ...)
+
+  - id: venomai.unsafe-input.javascript.dangerous-sink
+    languages: [javascript, typescript]
+    message: Request input appears to flow directly into a dangerous sink.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: eval(req.$FIELD.$VALUE)
+          - pattern: exec(req.$FIELD.$VALUE, ...)
+          - pattern: fs.readFileSync(req.$FIELD.$VALUE, ...)
+          - pattern: fetch(req.$FIELD.$VALUE, ...)
+
+  - id: venomai.sql-injection.python.execute-string
+    languages: [python]
+    message: SQL appears to be assembled with string interpolation before execution.
+    severity: ERROR
+    pattern-either:
+      - pattern: $CURSOR.execute(f"...{$X}...")
+      - pattern: $CURSOR.execute("..." + $X)
+      - pattern: $CURSOR.execute("..." % $X)
+      - pattern: $DB.execute(f"...{$X}...")
+
+  - id: venomai.sql-injection.javascript.query-string
+    languages: [javascript, typescript]
+    message: SQL appears to be assembled with string interpolation before execution.
+    severity: ERROR
+    pattern-either:
+      - pattern: $DB.query(`...${$X}...`)
+      - pattern: $DB.query("..." + $X)
+      - pattern: $DB.query('...' + $X)
+      - pattern: sequelize.query(`...${$X}...`)
+      - pattern: knex.raw(`...${$X}...`)
+
+  - id: venomai.weak-auth.python.weak-hash
+    languages: [python]
+    message: Weak hashing algorithm detected for authentication material.
+    severity: ERROR
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+
+  - id: venomai.weak-auth.python.plaintext-password
+    languages: [python]
+    message: Password handling looks like plaintext comparison or storage.
+    severity: WARNING
+    pattern-either:
+      - pattern-regex: (?i)password\s*==\s*
+      - pattern-regex: (?i)hashed_password\s*=\s*password
+
+  - id: venomai.missing-authorization.fastapi.route
+    languages: [python]
+    message: State-changing FastAPI route may be missing an auth dependency.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @router.post(...)
+              async def $FUNC(...):
+                ...
+          - pattern: |
+              @router.put(...)
+              async def $FUNC(...):
+                ...
+          - pattern: |
+              @router.patch(...)
+              async def $FUNC(...):
+                ...
+          - pattern: |
+              @router.delete(...)
+              async def $FUNC(...):
+                ...
+      - pattern-not: |
+          @router.post(...)
+          async def $FUNC(..., $AUTH=Depends(...), ...):
+            ...
+      - pattern-not: |
+          @router.put(...)
+          async def $FUNC(..., $AUTH=Depends(...), ...):
+            ...
+      - pattern-not: |
+          @router.patch(...)
+          async def $FUNC(..., $AUTH=Depends(...), ...):
+            ...
+      - pattern-not: |
+          @router.delete(...)
+          async def $FUNC(..., $AUTH=Depends(...), ...):
+            ...
+
+  - id: venomai.insecure-defaults.python.debug
+    languages: [python]
+    message: Debug mode enabled in application configuration.
+    severity: ERROR
+    pattern-regex: (?i)\bdebug\s*=\s*True\b
+
+  - id: venomai.insecure-defaults.cors.wildcard
+    languages: [python]
+    message: Wildcard CORS configuration detected.
+    severity: ERROR
+    pattern-regex: (?s)allow_origins\s*=\s*(\[\s*["']\*["']\s*\]|["']\*["'])
+
+  - id: venomai.insecure-defaults.python.verify-disabled
+    languages: [python]
+    message: TLS verification is disabled for an outbound request.
+    severity: ERROR
+    pattern-either:
+      - pattern: httpx.AsyncClient(..., verify=False, ...)
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.get(..., verify=False, ...)
+      - pattern: httpx.post(..., verify=False, ...)
+      - pattern: requests.get(..., verify=False, ...)
+      - pattern: requests.post(..., verify=False, ...)
+
+  - id: venomai.xss.react.dangerous-html
+    languages: [javascript, typescript]
+    message: Raw HTML is being rendered into the DOM.
+    severity: ERROR
+    pattern: |
+      <$_ dangerouslySetInnerHTML={{__html: $HTML}} />
+
+  - id: venomai.xss.react.unsafe-markdown-html
+    languages: [javascript, typescript]
+    message: Markdown rendering is configured to allow raw HTML.
+    severity: ERROR
+    pattern-either:
+      - pattern: |
+          <ReactMarkdown rehypePlugins={[rehypeRaw, ...]} ... />
+      - pattern: |
+          <Markdown rehypePlugins={[rehypeRaw, ...]} ... />
+
+  - id: venomai.unsafe-file.python.user-controlled-path
+    languages: [python]
+    message: Upload or request-derived filename is used directly in file IO.
+    severity: ERROR
+    pattern-either:
+      - pattern: open($FILE.filename, ...)
+      - pattern: open($REQ.$FIELD[$KEY], ...)
+      - pattern: Path($REQ.$FIELD[$KEY])
+
+  - id: venomai.info-leak.python.raw-error
+    languages: [python]
+    message: Raw error details appear to be returned to the client.
+    severity: WARNING
+    pattern-either:
+      - pattern: raise HTTPException(..., detail=str($ERR), ...)
+      - pattern: |
+          return {"error": str($ERR)}
+      - pattern: |
+          return {"detail": traceback.format_exc()}
+
+  - id: venomai.ssrf.python.user-url-fetch
+    languages: [python]
+    message: User-controlled URL is used in an outbound request.
+    severity: ERROR
+    pattern-either:
+      - pattern: httpx.get($REQ.$FIELD[$KEY], ...)
+      - pattern: httpx.post($REQ.$FIELD[$KEY], ...)
+      - pattern: requests.get($REQ.$FIELD[$KEY], ...)
+      - pattern: requests.post($REQ.$FIELD[$KEY], ...)
+
+  - id: venomai.path-traversal.python.user-path-open
+    languages: [python]
+    message: User-controlled path is used directly for file access.
+    severity: ERROR
+    pattern-either:
+      - pattern: open($REQ.$FIELD[$KEY], ...)
+      - pattern: Path($BASE) / $REQ.$FIELD[$KEY]
+      - pattern: os.path.join($BASE, $REQ.$FIELD[$KEY])
+
+  - id: venomai.command-injection.python.shell-true
+    languages: [python]
+    message: Shell execution appears to include dynamic input.
+    severity: ERROR
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: os.system(...)
+
+  - id: venomai.command-injection.javascript.exec-input
+    languages: [javascript, typescript]
+    message: Shell execution appears to include dynamic input.
+    severity: ERROR
+    pattern-either:
+      - pattern: exec($CMD, ...)
+      - pattern: execSync($CMD, ...)
+      - pattern: |
+          spawn($CMD, ..., {shell: true, ...})
+
+  - id: venomai.insecure-deserialization.python.pickle-loads
+    languages: [python]
+    message: Unsafe pickle deserialization detected.
+    severity: ERROR
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+
+  - id: venomai.insecure-deserialization.python.yaml-load
+    languages: [python]
+    message: Unsafe YAML loading detected.
+    severity: ERROR
+    pattern: yaml.load(...)
+
+  - id: venomai.open-redirect.fastapi.redirect-response
+    languages: [python]
+    message: Redirect target may come from user input.
+    severity: WARNING
+    pattern-either:
+      - pattern: RedirectResponse(url=$REQ.$FIELD[$KEY], ...)
+      - pattern: return RedirectResponse(url=$REQ.$FIELD[$KEY], ...)

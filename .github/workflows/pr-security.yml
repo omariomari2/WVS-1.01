@@ -1,0 +1,170 @@
+name: PR Security
+
+on:
+  pull_request:
+    paths:
+      - sandbox/**
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-security-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  scan-and-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR merge commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ./backend/pyproject.toml ]; then
+            python -m pip install -e ./backend
+          fi
+          python -m pip install semgrep
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: Detect touched sandbox projects
+        id: sandbox
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" -- 'sandbox/**')"; then
+            CHANGED_FILES="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA..HEAD" -- 'sandbox/**')"
+          fi
+
+          mapfile -t PROJECT_ROOTS < <(
+            printf '%s\n' "$CHANGED_FILES" |
+            awk -F/ '/^sandbox\/[^/]+\/?/ { print $1 "/" $2 }' |
+            sort -u
+          )
+
+          {
+            echo "count=${#PROJECT_ROOTS[@]}"
+            echo "roots<<EOF"
+            printf '%s\n' "${PROJECT_ROOTS[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Scan only changed files
+        id: scan
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts/report
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          SANDBOX_PROJECT_COUNT="${{ steps.sandbox.outputs.count }}"
+          SANDBOX_ROOTS="${{ steps.sandbox.outputs.roots }}"
+
+          if python -c "from app.sast.cli import main" 2>/dev/null; then
+            SCOPE_ARGS=()
+            if [ "${SANDBOX_PROJECT_COUNT:-0}" -gt 0 ]; then
+              mapfile -t PROJECT_ROOTS <<< "$SANDBOX_ROOTS"
+              for root in "${PROJECT_ROOTS[@]}"; do
+                [ -n "$root" ] || continue
+                SCOPE_ARGS+=(--scope-root "$root")
+              done
+            fi
+
+            if [ ${#SCOPE_ARGS[@]} -eq 0 ]; then
+              echo '{"repo_root":".","findings":[],"tool_errors":[]}' > artifacts/pr-findings.json
+            else
+              # Scan head (PR merge) - scoped to changed sandbox files only
+              python -m app.sast.cli scan-snapshot \
+                --repo . \
+                --diff-base "$BASE_SHA" \
+                "${SCOPE_ARGS[@]}" \
+                --output artifacts/pr-findings.json
+            fi
+
+            # Build an empty base snapshot (no findings) so the compare
+            # step treats every finding from the diff scan as "new".
+            echo '{"repo_root":".","findings":[],"tool_errors":[]}' > artifacts/base-findings.json
+
+            python -m app.sast.cli compare \
+              --base artifacts/base-findings.json \
+              --head artifacts/pr-findings.json \
+              --markdown artifacts/report/pr-security-summary.md \
+              --json artifacts/report/diff-findings.json \
+              --fail-threshold high \
+              --github-annotations
+          else
+            echo "## PR Security Summary" > artifacts/report/pr-security-summary.md
+            echo "" >> artifacts/report/pr-security-summary.md
+            echo "SAST tools not available on this branch. No findings to compare." >> artifacts/report/pr-security-summary.md
+            echo '{"new_findings":[],"resolved_findings":[],"unchanged_findings":[],"blocking_findings":[],"counts":{"new":0,"resolved":0,"unchanged":0,"blocking":0}}' > artifacts/report/diff-findings.json
+          fi
+
+      - name: Publish job summary
+        if: always()
+        run: cat artifacts/report/pr-security-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-security-report
+          path: |
+            artifacts/pr-findings.json
+            artifacts/report/diff-findings.json
+            artifacts/report/pr-security-summary.md
+
+      - name: Comment on pull request
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const body = fs.readFileSync("artifacts/report/pr-security-summary.md", "utf8");
+            const diffJson = fs.readFileSync("artifacts/report/diff-findings.json", "utf8");
+            const encoded = Buffer.from(diffJson).toString("base64");
+            const marker = "<!-- venomai-pr-security -->";
+            const dataTag = `<!-- venomai-findings:${encoded} -->`;
+            const prUrl = context.payload.pull_request.html_url;
+            const appLink = `http://localhost:4500?import_pr=${encodeURIComponent(prUrl)}`;
+            const linkLine = `\n\n---\n[Open in WVS](${appLink})\n`;
+            const commentBody = `${marker}\n${dataTag}\n${body}${linkLine}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === "Bot" && comment.body && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: commentBody,
+              });
+            }
+
+      - name: Enforce blocking findings gate
+        if: steps.scan.outcome == 'failure'
+        run: exit 1

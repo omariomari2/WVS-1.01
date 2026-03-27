@@ -1,35 +1,56 @@
-# Environment variables
-.env
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
 *.egg-info/
-.installed.cfg
+dist/
+build/
 *.egg
-
-# Virtual Environment
+.venv/
 venv/
-ENV/
+env/
+backend/.venv/
 
-# IDE specific files
-.idea/
+# Node
+node_modules/
+.next/
+out/
+frontend/node_modules/
+frontend/.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
 .vscode/
+.idea/
 *.swp
-*.swo 
-/feautures.txt
+*.swo
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Automation scripts
+scripts/
+
+# Project artifacts
+backend/*.db
+backend/*.sqlite*
+backend/*.egg-info/
+.venomai-launcher/
