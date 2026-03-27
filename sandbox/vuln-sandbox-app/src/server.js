@@ -113,7 +113,7 @@ app.post("/login", (req, res) => {
   const { username = "", password = "" } = req.body;
 
   // Intentional vulnerability: SQL Injection.
-  const sql = `SELECT id, username, role FROM users WHERE username = '${username}' AND password = '${password}'`;
+  // const sql = `SELECT id, username, role FROM users WHERE username = '${username}' AND password = '${password}'`;
 
   db.get(sql, (err, user) => {
     if (err) {
