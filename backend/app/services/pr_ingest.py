@@ -185,7 +185,7 @@ async def run_pr_ingest(scan_id: str, pr_url: str):
 
         except Exception as e:
             scan.status = "failed"
-            scan.error_message = str(e)
+            scan.error_message = github_client.describe_error(e)
             scan.completed_at = datetime.now(timezone.utc).isoformat()
             await db.commit()
 

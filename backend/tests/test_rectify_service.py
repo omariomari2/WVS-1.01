@@ -17,6 +17,7 @@ def _build_scan(**overrides) -> Scan:
         "repo_owner": "example",
         "repo_name": "repo",
         "pr_number": 1,
+        "head_sha": "abc123def456",
         "local_repo_path": None,
     }
     defaults.update(overrides)
@@ -122,16 +123,55 @@ def test_send_to_claude_surfaces_launch_errors(tmp_path, monkeypatch) -> None:
     assert "Fix this security finding" in (result["content"] or "")
 
 
+def test_send_to_claude_recovers_missing_local_repo_path(tmp_path, monkeypatch) -> None:
+    repo_path = tmp_path / "repo"
+    target_path = repo_path / "backend/app/scanner/http_client.py"
+    target_path.parent.mkdir(parents=True)
+    target_path.write_text("client = httpx.AsyncClient(verify=False)\n", encoding="utf-8")
+
+    launched: dict[str, Path] = {}
+
+    def fake_resolve(repo_name: str, repo_owner: str | None = None) -> Path:
+        assert repo_name == "repo"
+        assert repo_owner == "example"
+        return repo_path
+
+    def fake_launch(repo_arg: Path, prompt_arg: Path) -> None:
+        launched["repo"] = repo_arg
+        launched["prompt"] = prompt_arg
+
+    monkeypatch.setattr("app.services.local_repo.resolve_repo_path", fake_resolve)
+    monkeypatch.setattr("app.services.local_repo.launch_claude_in_terminal", fake_launch)
+
+    scan = _build_scan(local_repo_path=None)
+
+    result = asyncio.run(
+        rectify_service.send_to_claude(
+            None,
+            scan,
+            _build_finding(),
+        )
+    )
+
+    assert result["success"] is True
+    assert scan.local_repo_path == str(repo_path)
+    assert launched["repo"] == repo_path
+    assert launched["prompt"].is_file()
+
+
 def test_manual_comment_posts_inline_when_file_context_exists(monkeypatch) -> None:
     posted: dict[str, object] = {}
 
-    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+    async def fake_post_review_comment(
+        owner, repo, pr_number, body, commit_id, path, line, side="RIGHT"
+    ):
         posted.update(
             {
                 "owner": owner,
                 "repo": repo,
                 "pr_number": pr_number,
                 "body": body,
+                "commit_id": commit_id,
                 "path": path,
                 "line": line,
                 "side": side,
@@ -152,6 +192,7 @@ def test_manual_comment_posts_inline_when_file_context_exists(monkeypatch) -> No
 
     assert result["success"] is True
     assert posted["body"] == "Please restore TLS verification here."
+    assert posted["commit_id"] == _build_scan().head_sha
     assert posted["path"] == "backend/app/scanner/http_client.py"
     assert posted["line"] == 12
 
@@ -189,13 +230,16 @@ def test_manual_comment_falls_back_to_general_pr_comment(monkeypatch) -> None:
 def test_ai_comment_preserves_inline_targeting(monkeypatch) -> None:
     posted: dict[str, object] = {}
 
-    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+    async def fake_post_review_comment(
+        owner, repo, pr_number, body, commit_id, path, line, side="RIGHT"
+    ):
         posted.update(
             {
                 "owner": owner,
                 "repo": repo,
                 "pr_number": pr_number,
                 "body": body,
+                "commit_id": commit_id,
                 "path": path,
                 "line": line,
             }
@@ -223,6 +267,7 @@ def test_ai_comment_preserves_inline_targeting(monkeypatch) -> None:
 
     assert result["success"] is True
     assert posted["body"] == "Generated AI review comment"
+    assert posted["commit_id"] == _build_scan().head_sha
     assert posted["path"] == "backend/app/scanner/http_client.py"
     assert posted["line"] == 12
 
@@ -230,7 +275,9 @@ def test_ai_comment_preserves_inline_targeting(monkeypatch) -> None:
 def test_manual_comment_falls_back_when_inline_comment_is_forbidden(monkeypatch) -> None:
     posted: dict[str, object] = {}
 
-    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+    async def fake_post_review_comment(
+        owner, repo, pr_number, body, commit_id, path, line, side="RIGHT"
+    ):
         request = httpx.Request("POST", "https://api.github.com/repos/example/repo/pulls/1/comments")
         response = httpx.Response(
             403,
@@ -272,7 +319,9 @@ def test_manual_comment_falls_back_when_inline_comment_is_forbidden(monkeypatch)
 
 
 def test_manual_comment_includes_permission_guidance_when_github_returns_403(monkeypatch) -> None:
-    async def fake_post_review_comment(owner, repo, pr_number, body, path, line, side="RIGHT"):
+    async def fake_post_review_comment(
+        owner, repo, pr_number, body, commit_id, path, line, side="RIGHT"
+    ):
         request = httpx.Request("POST", "https://api.github.com/repos/example/repo/pulls/1/comments")
         response = httpx.Response(
             403,

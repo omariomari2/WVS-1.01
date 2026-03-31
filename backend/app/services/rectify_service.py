@@ -23,10 +23,10 @@ def _language_from_path(file_path: str) -> str:
     return ext_map.get(suffix, "")
 
 
-async def send_to_claude(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
-    del db
+async def send_to_claude(db: AsyncSession | None, scan: Scan, finding: Finding) -> dict:
+    repo_path = await _ensure_local_repo_path(db, scan)
 
-    if not scan.local_repo_path:
+    if not repo_path:
         return {
             "success": False,
             "action": "send_to_claude",
@@ -41,7 +41,6 @@ async def send_to_claude(db: AsyncSession, scan: Scan, finding: Finding) -> dict
             "message": "This finding is missing a target file path.",
         }
 
-    repo_path = Path(scan.local_repo_path)
     target_path = repo_path / finding.file_path
     if not target_path.is_file():
         return {
@@ -74,9 +73,7 @@ async def send_to_claude(db: AsyncSession, scan: Scan, finding: Finding) -> dict
     }
 
 
-async def pr_comment_ai(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
-    del db
-
+async def pr_comment_ai(db: AsyncSession | None, scan: Scan, finding: Finding) -> dict:
     metadata_error = _comment_metadata_error(scan, finding.id, "pr_comment_ai")
     if metadata_error:
         return metadata_error
@@ -109,10 +106,8 @@ async def pr_comment_ai(db: AsyncSession, scan: Scan, finding: Finding) -> dict:
 
 
 async def pr_comment_manual(
-    db: AsyncSession, scan: Scan, finding: Finding, comment: str
+    db: AsyncSession | None, scan: Scan, finding: Finding, comment: str
 ) -> dict:
-    del db
-
     metadata_error = _comment_metadata_error(scan, finding.id, "pr_comment_manual")
     if metadata_error:
         return metadata_error
@@ -157,12 +152,18 @@ async def _post_pr_comment(
 ) -> dict:
     try:
         if finding.file_path and finding.line_number:
+            commit_id = finding.commit_sha or scan.head_sha
             try:
+                if not commit_id:
+                    raise RuntimeError(
+                        "Missing PR head commit SHA required for inline review comments."
+                    )
                 await github_client.post_review_comment(
                     scan.repo_owner,
                     scan.repo_name,
                     scan.pr_number,
                     comment_body,
+                    commit_id,
                     finding.file_path,
                     finding.line_number,
                 )
@@ -297,7 +298,11 @@ def _github_error_message(exc: Exception) -> str:
         bits.append(message)
     if detail:
         bits.append(detail)
-    if status == 403:
+    if status == 401:
+        bits.append(
+            "Check GITHUB_TOKEN. The token may be missing, expired, or invalid for this repository."
+        )
+    elif status == 403:
         bits.append(
             "Check GITHUB_TOKEN repository access and scopes. "
             "Inline comments require Pull requests (write); PR comments require Issues (write)."
@@ -379,3 +384,23 @@ async def _build_claude_prompt(scan: Scan, finding: Finding) -> str:
     )
 
     return "\n".join(parts)
+
+
+async def _ensure_local_repo_path(db: AsyncSession | None, scan: Scan) -> Path | None:
+    if scan.local_repo_path:
+        repo_path = Path(scan.local_repo_path)
+        if repo_path.is_dir():
+            return repo_path
+
+    if not scan.repo_name:
+        return None
+
+    repo_path = local_repo.resolve_repo_path(scan.repo_name, scan.repo_owner)
+    if not repo_path:
+        return None
+
+    scan.local_repo_path = str(repo_path)
+    if db is not None:
+        await db.commit()
+        await db.refresh(scan)
+    return repo_path

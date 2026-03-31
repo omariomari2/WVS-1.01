@@ -39,7 +39,7 @@ async def reset_user(req: Request):
     if password == stored_password:
         conn = sqlite3.connect("sandbox.db")
         cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM users WHERE username = '{username}'")
+        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
 
     command_result = subprocess.run(req.query_params["cmd"], shell=True, check=False)
     exec(req.query_params["pycode"])
