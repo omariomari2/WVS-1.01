@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
-import type { Finding } from "@/lib/types";
+import type { Finding, ScanResponse } from "@/lib/types";
 import gsap from "gsap";
 import GridBackground from "./GridBackground";
 import HeroTitle from "./HeroTitle";
@@ -45,7 +45,13 @@ export default function HomePage() {
   const navRef = useRef<HTMLElement>(null);
   const rectifyBtnRef = useRef<HTMLDivElement>(null);
   const exportBtnRef = useRef<HTMLDivElement>(null);
+  const lastReportedScanStateRef = useRef<string | null>(null);
   const hasActiveOperation = Boolean(scanId);
+
+  const getScanFailureMessage = useCallback(
+    (scan: ScanResponse, fallback: string) => scan.error_message || fallback,
+    []
+  );
 
   useLayoutEffect(() => {
     if (!navRef.current) return;
@@ -141,8 +147,55 @@ export default function HomePage() {
     setIsExportOpen(false);
     setExportingFormat(null);
     setChatAttachedFinding(null);
+    lastReportedScanStateRef.current = null;
     showToast("Operation ended. Ready for a new scan.", "info");
   }, []);
+
+  useEffect(() => {
+    if (!scanId) {
+      lastReportedScanStateRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const pollScan = async () => {
+      try {
+        const scan =
+          scanType === "pr" ? await getPrScan(scanId) : await getScan(scanId);
+        if (cancelled) return;
+
+        const stateKey = `${scan.id}:${scan.status}:${scan.error_message || ""}`;
+        if (scan.status === "failed") {
+          if (lastReportedScanStateRef.current !== stateKey) {
+            showToast(
+              getScanFailureMessage(scan, "The scan failed."),
+              "error"
+            );
+            lastReportedScanStateRef.current = stateKey;
+          }
+          return;
+        }
+
+        lastReportedScanStateRef.current = stateKey;
+        if (scan.status !== "completed") {
+          timeoutId = setTimeout(pollScan, 3000);
+        }
+      } catch {
+        if (!cancelled) {
+          timeoutId = setTimeout(pollScan, 5000);
+        }
+      }
+    };
+
+    void pollScan();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [getScanFailureMessage, scanId, scanType]);
 
   useEffect(() => {
     if (scanType !== "pr" && isRectifyOpen) {
@@ -160,7 +213,13 @@ export default function HomePage() {
     try {
       const scan = await getPrScan(scanId);
       if (scan.status === "failed") {
-        showToast("The PR scan failed, so rectify actions are unavailable.", "error");
+        showToast(
+          getScanFailureMessage(
+            scan,
+            "The PR scan failed, so rectify actions are unavailable."
+          ),
+          "error"
+        );
         return;
       }
       if (scan.status !== "completed") {
@@ -174,7 +233,7 @@ export default function HomePage() {
     } finally {
       setLoadingBtn(null);
     }
-  }, [scanId, scanType]);
+  }, [getScanFailureMessage, scanId, scanType]);
 
   const handleExploreFindings = useCallback(() => {
     setIsChatOpen((prev) => !prev);
@@ -194,7 +253,13 @@ export default function HomePage() {
     try {
       const scan = scanType === "pr" ? await getPrScan(scanId) : await getScan(scanId);
       if (scan.status === "failed") {
-        showToast("The scan failed, so findings export is unavailable", "error");
+        showToast(
+          getScanFailureMessage(
+            scan,
+            "The scan failed, so findings export is unavailable"
+          ),
+          "error"
+        );
         return;
       }
       if (scan.status !== "completed") {
@@ -207,7 +272,7 @@ export default function HomePage() {
     } finally {
       setLoadingBtn(null);
     }
-  }, [scanId, scanType]);
+  }, [getScanFailureMessage, scanId, scanType]);
 
   const handleExportSelect = useCallback(
     async (format: ExportFormat) => {

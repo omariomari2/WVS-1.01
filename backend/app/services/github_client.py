@@ -178,6 +178,7 @@ async def post_review_comment(
     repo: str,
     pr_number: int,
     body: str,
+    commit_id: str,
     path: str,
     line: int,
     side: str = "RIGHT",
@@ -185,7 +186,13 @@ async def post_review_comment(
     async with _client() as c:
         resp = await c.post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
-            json={"body": body, "path": path, "line": line, "side": side},
+            json={
+                "body": body,
+                "commit_id": commit_id,
+                "path": path,
+                "line": line,
+                "side": side,
+            },
         )
         resp.raise_for_status()
         return resp.json()
@@ -221,3 +228,53 @@ async def post_issue_comment(
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def describe_error(exc: Exception) -> str:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return str(exc)
+
+    status = exc.response.status_code
+    message = ""
+    detail = ""
+    try:
+        payload = exc.response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        message = str(payload.get("message") or "").strip()
+        raw_errors = payload.get("errors")
+        if isinstance(raw_errors, list) and raw_errors:
+            parts: list[str] = []
+            for item in raw_errors[:3]:
+                if isinstance(item, dict):
+                    code = str(item.get("code") or "").strip()
+                    item_message = str(item.get("message") or "").strip()
+                    if code and item_message:
+                        parts.append(f"{code}: {item_message}")
+                    elif code or item_message:
+                        parts.append(code or item_message)
+                else:
+                    parts.append(str(item))
+            if parts:
+                detail = "; ".join(parts)
+
+    bits = [f"GitHub API {status}"]
+    if message:
+        bits.append(message)
+    if detail:
+        bits.append(detail)
+    if status == 401:
+        bits.append(
+            "Check GITHUB_TOKEN. The token may be missing, expired, or invalid for this repository."
+        )
+    elif status == 403:
+        bits.append(
+            "Check GITHUB_TOKEN repository access and scopes for this repo."
+        )
+    elif status == 404:
+        bits.append(
+            "Verify the repository and pull request are accessible to the configured token."
+        )
+    return " - ".join(bits)

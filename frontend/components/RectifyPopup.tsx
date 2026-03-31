@@ -347,28 +347,17 @@ export default function RectifyPopup({
   }, [handleClose, makeErrorResult, manualComment, scanId, selectedFinding]);
 
   const findingItems = findings.map((finding) => {
-    const isBusy = actionLoading === `finding:${finding.id}`;
     return (
       <button
         key={finding.id}
         type="button"
         className="rectify-popup-finding"
-        disabled={isBusy}
+        disabled={actionLoading === `finding:${finding.id}`}
         onClick={() => void handleFindingSelection(finding)}
       >
-        <span className="finding-severity-dot" data-severity={finding.severity} />
-        <span className="rectify-popup-finding-copy">
-          <span className="rectify-popup-finding-title">
-            {finding.title || finding.owasp_name}
-          </span>
-          {finding.file_path && (
-            <span className="rectify-popup-finding-location">
-              {finding.file_path}
-              {finding.line_number ? `:${finding.line_number}` : ""}
-            </span>
-          )}
+        <span className="rectify-popup-finding-label">
+          {finding.title || finding.owasp_name}
         </span>
-        {isBusy && <span className="rectify-popup-inline-note">Working...</span>}
       </button>
     );
   });
