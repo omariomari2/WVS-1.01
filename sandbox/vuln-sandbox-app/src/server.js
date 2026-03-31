@@ -4,6 +4,7 @@ const sqlite3 = require("sqlite3").verbose();
 const { exec } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 require("dotenv").config();
 
@@ -79,6 +80,13 @@ app.get("/", (req, res) => {
         <button type="submit">Login</button>
       </form>
 
+      <h2>Register</h2>
+      <form method="POST" action="/register">
+        <label>Username <input name="username" /></label>
+        <label>Password <input name="password" /></label>
+        <button type="submit">Register</button>
+      </form>
+
       <h2>Create Note</h2>
       <form method="POST" action="/notes">
         <textarea name="content" rows="3" cols="60"></textarea>
@@ -125,10 +133,7 @@ app.post("/login", (req, res) => {
 app.get("/api/profile/:id", (req, res) => {
   const requestedId = Number(req.params.id);
 
-  if (req.session.userId !== requestedId && req.session.role !== "admin") {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-
+  // Intentional vulnerability: Broken access control / IDOR.
   db.get("SELECT id, username, role FROM users WHERE id = ?", [requestedId], (err, user) => {
     if (err) {
       return res.status(500).json({ error: "Internal server error" });
@@ -141,6 +146,24 @@ app.get("/api/profile/:id", (req, res) => {
       user
     });
   });
+});
+
+app.post("/register", (req, res) => {
+  const { username = "", password = "" } = req.body;
+
+  // Intentional vulnerability: Weak hashing — MD5 is not suitable for passwords.
+  const hashed = crypto.createHash("md5").update(password).digest("hex");
+
+  db.run(
+    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+    [username, hashed, "user"],
+    (err) => {
+      if (err) {
+        return res.status(400).send("Username already taken");
+      }
+      res.redirect("/");
+    }
+  );
 });
 
 app.get("/admin/users", (req, res) => {
