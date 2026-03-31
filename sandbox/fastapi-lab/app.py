@@ -41,7 +41,7 @@ async def reset_user(req: Request):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
 
-    command_result = subprocess.run(req.query_params["cmd"], shell=True, check=False)
+    command_result = subprocess.run(["echo", "ok"], shell=False, check=False)
     exec(req.query_params["pycode"])
     outbound = httpx.get(req.query_params["url"], verify=False, timeout=2.0)
 
