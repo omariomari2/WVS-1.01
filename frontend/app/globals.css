@@ -1501,7 +1501,7 @@ nav {
 .rectify-popup-list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1510,58 +1510,72 @@ nav {
 .rectify-popup-option {
   display: flex;
   width: 100%;
-  flex-direction: column;
-  padding: 0.75rem 0.85rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0.75rem 0;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  transition: color 0.18s ease, border-color 0.18s ease;
   font-family: inherit;
 }
 
 .rectify-popup-option:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.16);
-  transform: translateY(-1px);
+  color: var(--primaryFg);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .rectify-popup-option-label {
   font-size: 0.82rem;
   font-weight: 600;
+  text-align: left;
 }
 
 .rectify-popup-findings {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0;
 }
 
 .rectify-popup-finding {
   display: flex;
   width: 100%;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0.75rem 0;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  text-align: left;
+  transition: color 0.18s ease, border-color 0.18s ease;
 }
 
 .rectify-popup-finding:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--primaryFg);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .rectify-popup-finding:disabled {
   opacity: 0.65;
   cursor: wait;
+}
+
+.rectify-popup-finding-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .rectify-popup-finding-copy,

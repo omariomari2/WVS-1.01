@@ -52,20 +52,11 @@ app.use(
     resave: false,
     saveUninitialized: true,
     cookie: {
-      httpOnly: false,
+      httpOnly: true,
       secure: false
     }
   })
 );
-
-app.use((req, _res, next) => {
-  if (!req.session.userId) {
-    req.session.userId = 2;
-    req.session.username = "alice";
-    req.session.role = "user";
-  }
-  next();
-});
 
 app.get("/", (req, res) => {
   db.all("SELECT id, author_id, content FROM notes ORDER BY id DESC", (err, rows = []) => {
@@ -79,7 +70,7 @@ app.get("/", (req, res) => {
 
     res.send(`
       <h1>Vulnerable Training App</h1>
-      <p>Logged in as: ${req.session.username} (role: ${req.session.role})</p>
+      <p>Logged in as: ${req.session.username || "anonymous"} (role: ${req.session.role || "none"})</p>
 
       <h2>Login</h2>
       <form method="POST" action="/login">
@@ -102,7 +93,6 @@ app.get("/", (req, res) => {
         <li><a href="/api/profile/1">View profile 1</a></li>
         <li><a href="/api/profile/2">View profile 2</a></li>
         <li><a href="/admin/users">Admin user dump</a></li>
-        <li><a href="/debug/secrets">Debug secrets</a></li>
         <li><a href="/tools/ping?host=127.0.0.1">Ping tool</a></li>
       </ul>
     `);
@@ -113,10 +103,11 @@ app.post("/login", (req, res) => {
   const { username = "", password = "" } = req.body;
 
   // Intentional vulnerability: SQL Injection.
+  const sql = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
 
   db.get(sql, (err, user) => {
     if (err) {
-      return res.status(500).send(`Database error: ${err.message}`);
+      return res.status(500).send("Internal server error");
     }
 
     if (!user) {
@@ -134,10 +125,13 @@ app.post("/login", (req, res) => {
 app.get("/api/profile/:id", (req, res) => {
   const requestedId = Number(req.params.id);
 
-  // Intentional vulnerability: Broken access control / IDOR.
+  if (req.session.userId !== requestedId && req.session.role !== "admin") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   db.get("SELECT id, username, role FROM users WHERE id = ?", [requestedId], (err, user) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -149,26 +143,16 @@ app.get("/api/profile/:id", (req, res) => {
   });
 });
 
-app.get("/admin/users", (_req, res) => {
-  // Intentional vulnerability: Missing authorization check.
+app.get("/admin/users", (req, res) => {
+  if (req.session.role !== "admin") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   db.all("SELECT id, username, password, role FROM users ORDER BY id", (err, users = []) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
     return res.json({ users });
-  });
-});
-
-app.get("/debug/secrets", (_req, res) => {
-  // Intentional vulnerability: Exposed secrets in a debug endpoint.
-  res.json({
-    hardcodedConfig: HARD_CODED_CONFIG,
-    env: {
-      SESSION_SECRET: process.env.SESSION_SECRET,
-      JWT_SIGNING_KEY: process.env.JWT_SIGNING_KEY,
-      DB_PASSWORD: process.env.DB_PASSWORD,
-      STRIPE_API_KEY: process.env.STRIPE_API_KEY
-    }
   });
 });
 
